@@ -29,6 +29,54 @@ _BASE = dict(
 def _layout_base_without(*keys: str) -> dict:
     return {key: value for key, value in _BASE.items() if key not in keys}
 
+
+def _reduce_ticks(ticks: list, max_ticks: int) -> list:
+    if len(ticks) <= max_ticks:
+        return ticks
+    tick_series = pd.Series(pd.to_datetime(ticks))
+    targets = pd.date_range(tick_series.min(), tick_series.max(), periods=max_ticks)
+    selected = []
+    for target in targets:
+        nearest_idx = (tick_series - target).abs().sort_values().index
+        for idx in nearest_idx:
+            candidate = tick_series.loc[idx].to_pydatetime()
+            if candidate not in selected:
+                selected.append(candidate)
+                break
+    return sorted(selected)
+
+
+def _date_tick_values(values: pd.Series | pd.Index, max_ticks: int = 4) -> list:
+    ticks = pd.Series(values).dropna().drop_duplicates().sort_values().tolist()
+    if len(ticks) <= max_ticks:
+        return ticks
+
+    return _reduce_ticks(ticks, max_ticks)
+
+
+def _month_tick_values(values: pd.Series | pd.Index, max_ticks: int = 4) -> list:
+    series = pd.Series(pd.to_datetime(values)).dropna()
+    if series.empty:
+        return []
+    start = series.min().to_period("M").to_timestamp()
+    end = series.max().to_period("M").to_timestamp()
+    ticks = pd.date_range(start, end, freq="MS").to_pydatetime().tolist()
+    return _reduce_ticks(ticks, max_ticks)
+
+
+def _date_axis(values: pd.Series | pd.Index, tickformat: str = "%d/%m") -> dict:
+    series = pd.Series(pd.to_datetime(values)).dropna()
+    use_months = not series.empty and (series.max() - series.min()).days > 31
+    return dict(
+        **_AXIS_X,
+        title=None,
+        tickmode="array",
+        tickvals=_month_tick_values(values) if use_months else _date_tick_values(values),
+        tickformat="%b %y" if use_months else tickformat,
+        tickangle=-25,
+        automargin=True,
+    )
+
 _AXIS_X = dict(
     showgrid=False, zeroline=False,
     tickfont=dict(size=10, color="#94A3B8"),
@@ -74,9 +122,9 @@ def chart_evolution_capital(df_evolution: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         **_BASE,
         title=dict(text="Évolution du capital", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, title=None, tickmode="array", tickvals=tick_values, tickformat="%d %b %Y"),
+        xaxis=_date_axis(tick_values),
         yaxis=dict(**_AXIS_Y, title=None, tickformat=","),
-        height=300,
+        height=320,
         showlegend=False,
     )
     return fig
@@ -209,7 +257,7 @@ def chart_evolution_apports_investisseurs(df_evolution: pd.DataFrame) -> go.Figu
     fig.update_layout(
         **_layout_base_without("legend"),
         title=dict(text="Évolution des apports par investisseur", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, title=None, tickmode="array", tickvals=tick_values, tickformat="%d %b %Y"),
+        xaxis=_date_axis(tick_values),
         yaxis=dict(**_AXIS_Y, title=None, tickformat=",", side="left"),
         yaxis2=dict(
             title=None,
@@ -219,7 +267,7 @@ def chart_evolution_apports_investisseurs(df_evolution: pd.DataFrame) -> go.Figu
             zeroline=False,
             tickfont=dict(size=10, color="#94A3B8"),
         ),
-        height=300,
+        height=330,
         legend=dict(
             orientation="h", yanchor="bottom", y=-0.32, xanchor="center", x=0.5,
             font=dict(size=10, color="#94A3B8"), bgcolor="rgba(0,0,0,0)",
@@ -270,7 +318,7 @@ def chart_evolution_apports_investisseur(df_evolution: pd.DataFrame, nom: str) -
     fig.update_layout(
         **_layout_base_without("legend"),
         title=dict(text=f"Évolution des apports · {nom}", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, title=None, tickmode="array", tickvals=tick_values, tickformat="%d %b %Y"),
+        xaxis=_date_axis(tick_values),
         yaxis=dict(**_AXIS_Y, title=None, tickformat=",", side="left"),
         yaxis2=dict(
             title=None,
@@ -280,7 +328,7 @@ def chart_evolution_apports_investisseur(df_evolution: pd.DataFrame, nom: str) -
             zeroline=False,
             tickfont=dict(size=10, color="#94A3B8"),
         ),
-        height=260,
+        height=290,
         legend=dict(
             orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5,
             font=dict(size=10, color="#94A3B8"), bgcolor="rgba(0,0,0,0)",
@@ -412,7 +460,7 @@ def chart_historique_taux(df_taux: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         **_BASE,
         title=dict(text="Historique EUR → GNF", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, title=None),
+        xaxis=dict(**_AXIS_X, title=None, tickangle=-25, automargin=True),
         yaxis=dict(**_AXIS_Y, title=None),
         height=280,
         showlegend=False,
@@ -449,7 +497,7 @@ def chart_mouvements_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
         **_BASE,
         barmode="group",
         title=dict(text="Apports & dépenses / mois", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, tickmode="array", tickvals=tick_values, tickformat="%b %Y"),
+        xaxis=_date_axis(tick_values, "%b %Y"),
         yaxis=dict(**_AXIS_Y, title=None),
         height=260,
         bargap=0.25,
