@@ -1,0 +1,3 @@
+﻿id;nom_objectif;montant_cible_gnf;date_cible;description;actif
+obj-001;Objectif Septembre 2026;250000000;2026-09-01;Atteindre 50% du capital cible (250 millions GNF) avant le 1er septembre 2026;True
+obj-002;Objectif Décembre 2026;500000000;2026-12-31;Atteindre 100% du capital cible (500 millions GNF) avant le 31 décembre 2026;True

@@ -1,0 +1,4 @@
+﻿id;nom;investisseur_id;pays;devise;type_compte;actif;description;date_creation
+cpt-e92e5848;Orange Money;inv-6f12fde9;Guinée;GNF;mobile money;True;;2026-05-01
+cpt-0d06dbcd;YMO;inv-6f12fde9;Guinée;GNF;YMO;True;;2026-01-01
+cpt-cec777b6;BNP;inv-6f12fde9;France;EUR;banque;True;;2026-01-01

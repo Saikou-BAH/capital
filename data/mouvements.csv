@@ -1,0 +1,16 @@
+﻿id;date;type_mouvement;investisseur_id;compte_source_id;compte_destination_id;montant_origine;devise_origine;taux_eur_gnf;montant_converti_gnf;commentaire;compte_dans_capital;date_creation
+mvt-8c5b86cc;2026-01-01;apport;inv-6f12fde9;;cpt-cec777b6;1000.0;EUR;10500.0;10500000.0;C'est l'apport initial.;True;2026-05-01 10:36
+mvt-845f6cfc;2026-01-01;transfert;inv-6f12fde9;cpt-cec777b6;cpt-0d06dbcd;1000.0;EUR;10500.0;10500000.0;Transfert vers la guinée du premier apport;False;2026-05-01 11:06
+mvt-7f165d2b;2026-01-04;apport;inv-6f12fde9;;cpt-cec777b6;2757.01074766;EUR;10700.0;29500015.0;Le second apport corrigé : 79,43925234 EUR retirés avant transfert.;True;2026-05-01 11:12
+mvt-ad6965b2;2026-01-04;transfert;inv-6f12fde9;cpt-cec777b6;cpt-0d06dbcd;2757.01074766;EUR;10700.0;29500015.0;Transfert du second apport corrigé vers la Guinée.;False;2026-05-01 11:16
+mvt-d3736f12;2026-03-01;apport;inv-6f12fde9;;cpt-cec777b6;3000.0;EUR;10750.0;32250000;;True;2026-05-01 11:28
+mvt-bb986a0d;2026-03-01;transfert;inv-6f12fde9;cpt-cec777b6;cpt-e92e5848;3000.0;EUR;10750.0;32250000;Transfert du troisieme apport;False;2026-05-01 11:32
+mvt-34f50bf5;2026-04-01;apport;inv-df8db579;;cpt-cec777b6;490.0;EUR;10700.0;5243000;Premier apport;True;2026-05-01 11:42
+mvt-ae980ab6;2026-04-01;transfert;inv-df8db579;cpt-cec777b6;cpt-e92e5848;490.0;EUR;10700.0;5243000;;False;2026-05-01 11:43
+mvt-cf302aa2;2026-04-02;apport;inv-6f12fde9;;cpt-cec777b6;2088.78;EUR;10700.0;22349946;;True;2026-05-01 11:45
+mvt-da72ba03;2026-04-02;transfert;inv-6f12fde9;cpt-cec777b6;cpt-e92e5848;2088.78;EUR;10700.0;22349946;"Premier apport du mois d'avril;";False;2026-05-01 11:46
+mvt-53081834;2026-04-03;apport;inv-6f12fde9;;cpt-cec777b6;400.0;EUR;10700.0;4280000;Second apport d'avril;True;2026-05-01 11:47
+mvt-1a57108c;2026-04-03;transfert;inv-6f12fde9;cpt-cec777b6;cpt-e92e5848;400.0;EUR;10700.0;4280000;Second apport d'avril;False;2026-05-01 11:47
+mvt-4a677598;2026-04-04;apport;inv-6f12fde9;;cpt-cec777b6;21.43;EUR;10600.0;227158;Dernier apport d'avril;True;2026-05-01 11:48
+mvt-0528f888;2026-04-04;transfert;inv-6f12fde9;cpt-cec777b6;cpt-e92e5848;21.43;EUR;10600.0;227158;;False;2026-05-01 11:49
+mvt-58b3e4d7;2026-05-01;apport;inv-df8db579;;cpt-cec777b6;2450.0;EUR;10600.0;25970000;Apport du mois de mai.;True;2026-05-01 11:53
