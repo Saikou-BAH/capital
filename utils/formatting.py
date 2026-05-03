@@ -76,6 +76,7 @@ html, body, [class*="css"], .stApp {
 /* ── Streamlit chrome ── */
 #MainMenu, footer, [data-testid="stDecoration"],
 [data-testid="stToolbar"], header { visibility: hidden !important; }
+[data-testid="collapsedControl"] { visibility: visible !important; }
 
 /* ── App background ── */
 .stApp { background: #F0F4F8 !important; }
