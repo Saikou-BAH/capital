@@ -75,8 +75,11 @@ html, body, [class*="css"], .stApp {
 
 /* ── Streamlit chrome ── */
 #MainMenu, footer, [data-testid="stDecoration"],
-[data-testid="stToolbar"], header { visibility: hidden !important; }
-[data-testid="collapsedControl"] { visibility: visible !important; }
+[data-testid="stToolbar"] { visibility: hidden !important; }
+header { visibility: visible !important; background: transparent !important; }
+header [data-testid="stToolbar"],
+header [data-testid="stDecoration"],
+header [data-testid="stMainMenuPopover"] { visibility: hidden !important; }
 
 /* ── App background ── */
 .stApp { background: #F0F4F8 !important; }
