@@ -506,6 +506,56 @@ def chart_mouvements_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def chart_frais_retrait_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
+    if df_mvt is None or df_mvt.empty:
+        return _empty("Aucun frais enregistré")
+
+    df = df_mvt.copy()
+    df = df[df["type_mouvement"] == "frais_retrait"]
+    if df.empty:
+        return _empty("Aucun frais de retrait enregistré")
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df = df.dropna(subset=["date"])
+    df["mois"] = df["date"].dt.to_period("M").dt.to_timestamp()
+
+    frais_mois = df.groupby("mois")["montant_converti_gnf"].sum()
+    total = frais_mois.sum()
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=frais_mois.index, y=frais_mois.values, name="Frais de retrait",
+        marker=dict(color="#7C3AED", opacity=0.85),
+        hovertemplate="<b>%{x|%b %Y}</b><br>Frais : %{y:,.0f} GNF<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=frais_mois.index, y=frais_mois.cumsum(),
+        name="Cumul", mode="lines+markers",
+        line=dict(color="#EC4899", width=2, dash="dot"),
+        marker=dict(size=5),
+        hovertemplate="<b>%{x|%b %Y}</b><br>Cumul : %{y:,.0f} GNF<extra></extra>",
+        yaxis="y2",
+    ))
+    fig.update_layout(
+        **_BASE,
+        barmode="group",
+        title=dict(
+            text=f"Frais de retrait / mois — Total : {fmt_gnf(total)}",
+            font=dict(size=12, color="#475569", weight=700), x=0, xref="paper",
+        ),
+        xaxis=_date_axis(frais_mois.index, "%b %Y"),
+        yaxis=dict(**_AXIS_Y, title=None),
+        yaxis2=dict(
+            overlaying="y", side="right", showgrid=False, zeroline=False,
+            tickfont=dict(size=9, color="#EC4899"), title=None,
+        ),
+        height=260,
+        bargap=0.3,
+    )
+    return fig
+
+
 def _empty(msg: str) -> go.Figure:
     fig = go.Figure()
     fig.add_annotation(

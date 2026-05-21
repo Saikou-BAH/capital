@@ -13,6 +13,7 @@ from utils.formatting import (
     inject_css, kpi_card, section_header, fmt_gnf, fmt_eur, fmt_taux,
     badge_mouvement, divider, spacer,
 )
+from utils.charts import chart_frais_retrait_par_mois
 from utils.runtime import is_read_only_mode, read_only_notice
 
 st.set_page_config(page_title="Mouvements", page_icon="💸", layout="wide")
@@ -42,11 +43,13 @@ if not df_mvt.empty:
     total_apports = df_mvt[df_mvt["type_mouvement"] == "apport"]["montant_converti_gnf"].sum()
     nb_transferts = len(df_mvt[df_mvt["type_mouvement"] == "transfert"])
     total_depenses = df_mvt[df_mvt["type_mouvement"].isin(["depense", "retrait"])]["montant_converti_gnf"].sum()
+    total_frais = df_mvt[df_mvt["type_mouvement"] == "frais_retrait"]["montant_converti_gnf"].sum()
+    nb_frais = len(df_mvt[df_mvt["type_mouvement"] == "frais_retrait"])
 else:
-    nb_total = nb_apports = nb_transferts = 0
-    total_apports = total_depenses = 0.0
+    nb_total = nb_apports = nb_transferts = nb_frais = 0
+    total_apports = total_depenses = total_frais = 0.0
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
     st.markdown(kpi_card("Total mouvements", str(nb_total), icon="📋", color="blue"), unsafe_allow_html=True)
 with c2:
@@ -54,9 +57,19 @@ with c2:
 with c3:
     st.markdown(kpi_card("Dépenses", fmt_gnf(total_depenses), sub=f"{nb_transferts} transfert(s) hors apports", icon="💸", color="red"), unsafe_allow_html=True)
 with c4:
+    st.markdown(kpi_card("Frais de retrait", fmt_gnf(total_frais), sub=f"{nb_frais} opération(s)", icon="🏧", color="violet"), unsafe_allow_html=True)
+with c5:
     st.markdown(kpi_card("Dernier taux EUR/GNF", fmt_taux(dernier_taux), icon="💱", color="amber"), unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
+
+# ── Graphique frais de retrait ────────────────────────────────────────────────
+if not df_mvt.empty and nb_frais > 0:
+    st.markdown(section_header("Frais de retrait", "🏧", "#7C3AED"), unsafe_allow_html=True)
+    st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
+    st.plotly_chart(chart_frais_retrait_par_mois(df_mvt), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(divider(), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FORMULAIRE
