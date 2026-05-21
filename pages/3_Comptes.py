@@ -130,20 +130,19 @@ else:
         solde_fmt = fmt_eur(solde) if dev == "EUR" else fmt_gnf(solde)
         solde_clr = "#059669" if solde > 0 else ("#DC2626" if solde < 0 else "#94A3B8")
 
+        frais_pct_val = float(row.get("frais_pct", 0) or 0)
         c1, c2, c3, c4, c5, c6 = st.columns([3, 2.5, 1.2, 1.8, 2, 2.5])
         with c1:
-            actif_badge = (
-                '<span style="background:#ECFDF5;color:#059669;font-size:.6rem;font-weight:700;'
-                'padding:.1rem .35rem;border-radius:4px;letter-spacing:.04em">ACTIF</span>'
-                if is_actif else
-                '<span style="background:#FEF2F2;color:#DC2626;font-size:.6rem;font-weight:700;'
-                'padding:.1rem .35rem;border-radius:4px;letter-spacing:.04em">INACTIF</span>'
+            frais_badge = (
+                f'<span style="background:#f3e8ff;color:#6b21a8;font-size:.6rem;font-weight:700;'
+                f'padding:.1rem .35rem;border-radius:4px;margin-left:.3rem">🏧 {frais_pct_val*100:.0f}% frais</span>'
+                if frais_pct_val > 0 else ""
             )
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:.5rem;padding:.15rem 0">'
                 f'  <div style="font-size:1.1rem">{icone}</div>'
                 f'  <div>'
-                f'    <div style="font-size:.87rem;font-weight:700;color:#0F172A">{row["nom"]}</div>'
+                f'    <div style="font-size:.87rem;font-weight:700;color:#0F172A">{row["nom"]}{frais_badge}</div>'
                 f'    <div style="font-size:.7rem;color:#94A3B8;margin-top:.05rem">{drapeau} {row["pays"]} · {row["type_compte"]}</div>'
                 f'  </div>'
                 f'</div>',
@@ -203,12 +202,17 @@ with st.expander("➕ Ajouter un compte", expanded=False):
             actif    = st.checkbox("Compte actif", value=True)
             date_creation = st.date_input("Date de création *", value=date.today())
         description = st.text_area("Description", height=80)
+        frais_pct_input = st.number_input(
+            "Frais de retrait (%)",
+            min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f",
+            help="Ex : 1 = 1%. Un mouvement de frais est créé automatiquement à chaque transfert entrant.",
+        )
 
         if st.form_submit_button("Créer le compte", type="primary", disabled=READ_ONLY):
             if not nom.strip():
                 st.error("Le nom est obligatoire.")
             else:
-                if add_compte(nom.strip(), inv_id, pays, devise, type_cpt, actif, description.strip(), str(date_creation)):
+                if add_compte(nom.strip(), inv_id, pays, devise, type_cpt, actif, description.strip(), str(date_creation), frais_pct=frais_pct_input / 100):
                     st.success(f"✅ Compte **{nom}** créé.")
                     st.cache_data.clear()
                     st.rerun()
@@ -241,11 +245,19 @@ if not df_cpt.empty:
                     )
                     n_actif = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
                     n_desc  = st.text_area("Description", value=str(sel.get("description", "")), height=80)
+                n_frais_pct = st.number_input(
+                    "Frais de retrait (%)",
+                    min_value=0.0, max_value=100.0,
+                    value=float(sel.get("frais_pct", 0) or 0) * 100,
+                    step=0.1, format="%.2f",
+                    help="Ex : 1 = 1%. Un mouvement de frais est créé automatiquement à chaque transfert entrant.",
+                )
 
                 if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
                     if update_compte(choix, {"nom": n_nom, "pays": n_pays, "devise": n_dev,
                                              "type_compte": n_type, "investisseur_id": n_inv,
-                                             "actif": str(n_actif), "description": n_desc}):
+                                             "actif": str(n_actif), "description": n_desc,
+                                             "frais_pct": str(n_frais_pct / 100)}):
                         st.success("✅ Compte mis à jour.")
                         st.cache_data.clear()
                         st.rerun()

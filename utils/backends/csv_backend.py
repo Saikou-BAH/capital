@@ -146,7 +146,7 @@ def get_comptes() -> pd.DataFrame:
 
 def add_compte(nom: str, investisseur_id: str, pays: str, devise: str,
                type_compte: str, actif: bool = True, description: str = "",
-               date_creation: str | None = None) -> bool:
+               date_creation: str | None = None, frais_pct: float = 0.0) -> bool:
     row = {
         "id": _new_id("cpt-"),
         "nom": nom,
@@ -157,6 +157,7 @@ def add_compte(nom: str, investisseur_id: str, pays: str, devise: str,
         "actif": str(actif),
         "description": description,
         "date_creation": str(date_creation or date.today()),
+        "frais_pct": str(frais_pct),
     }
     return _append_csv(SHEET_COMPTES, COLS_COMPTES, row)
 

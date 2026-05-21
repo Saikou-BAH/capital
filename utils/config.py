@@ -20,7 +20,7 @@ DEVISE_REFERENCE = "GNF"
 TAUX_EUR_GNF_DEFAUT = 0  # 0 = aucun taux connu, l'utilisateur doit le saisir
 
 # ── Référentiels métier ───────────────────────────────────────────────────────
-TYPES_MOUVEMENT  = ["apport", "transfert", "depense", "retrait", "ajustement"]
+TYPES_MOUVEMENT  = ["apport", "transfert", "depense", "retrait", "ajustement", "frais_retrait"]
 TYPES_COMPTE     = ["banque", "espèces", "mobile money", "YMO", "autre"]
 PAYS_DISPONIBLES = ["France", "Guinée", "Belgique", "Sénégal", "Autre"]
 STATUTS_INVESTISSEUR = ["actif", "inactif", "potentiel"]
@@ -37,7 +37,7 @@ COLS_INVESTISSEURS = ["id", "nom", "statut", "notes", "date_creation"]
 
 COLS_COMPTES = [
     "id", "nom", "investisseur_id", "pays", "devise",
-    "type_compte", "actif", "description", "date_creation",
+    "type_compte", "actif", "description", "date_creation", "frais_pct",
 ]
 
 COLS_MOUVEMENTS = [
@@ -73,17 +73,19 @@ COULEUR_NEUTRE   = "#6b7280"
 
 # ── Labels par type de mouvement ──────────────────────────────────────────────
 EMOJI_MOUVEMENT = {
-    "apport":     "💰",
-    "transfert":  "↔️",
-    "depense":    "💸",
-    "retrait":    "📤",
-    "ajustement": "🔧",
+    "apport":        "💰",
+    "transfert":     "↔️",
+    "depense":       "💸",
+    "retrait":       "📤",
+    "ajustement":    "🔧",
+    "frais_retrait": "🏧",
 }
 
 COULEUR_BADGE_MOUVEMENT = {
-    "apport":     ("#166534", "#dcfce7"),
-    "transfert":  ("#1e40af", "#dbeafe"),
-    "depense":    ("#991b1b", "#fee2e2"),
-    "retrait":    ("#991b1b", "#fee2e2"),
-    "ajustement": ("#92400e", "#fef3c7"),
+    "apport":        ("#166534", "#dcfce7"),
+    "transfert":     ("#1e40af", "#dbeafe"),
+    "depense":       ("#991b1b", "#fee2e2"),
+    "retrait":       ("#991b1b", "#fee2e2"),
+    "ajustement":    ("#92400e", "#fef3c7"),
+    "frais_retrait": ("#6b21a8", "#f3e8ff"),
 }

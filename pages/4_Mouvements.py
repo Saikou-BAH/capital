@@ -31,6 +31,7 @@ READ_ONLY = is_read_only_mode()
 noms_inv = df_inv.set_index("id")["nom"].to_dict() if not df_inv.empty else {}
 noms_cpt = df_cpt.set_index("id")["nom"].to_dict() if not df_cpt.empty else {}
 compte_devises = df_cpt.set_index("id")["devise"].astype(str).str.upper().to_dict() if not df_cpt.empty else {}
+compte_frais = df_cpt.set_index("id")["frais_pct"].apply(lambda x: float(x) if x not in ("", None) else 0.0).to_dict() if not df_cpt.empty else {}
 dernier_taux = get_dernier_taux(df_taux)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
@@ -64,11 +65,12 @@ st.markdown(section_header("Enregistrer un mouvement", "➕", "#2563EB"), unsafe
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
 TYPE_HELP = {
-    "apport":     ("💰", "green",  "Nouvel argent injecté dans le projet — **augmente** le capital total."),
-    "transfert":  ("↔️", "blue",   "Argent existant déplacé d'un compte à un autre — **ne change pas** le capital."),
-    "depense":    ("💸", "red",    "Dépense payée depuis un compte — **diminue** le capital net disponible."),
-    "retrait":    ("📤", "amber",  "Argent qui sort du projet — **diminue** le capital total."),
-    "ajustement": ("🔧", "violet", "Correction d'une erreur — n'affecte pas le capital calculé."),
+    "apport":        ("💰", "green",  "Nouvel argent injecté dans le projet — **augmente** le capital total."),
+    "transfert":     ("↔️", "blue",   "Argent existant déplacé d'un compte à un autre — **ne change pas** le capital."),
+    "depense":       ("💸", "red",    "Dépense payée depuis un compte — **diminue** le capital net disponible."),
+    "retrait":       ("📤", "amber",  "Argent qui sort du projet — **diminue** le capital total."),
+    "ajustement":    ("🔧", "violet", "Correction d'une erreur — n'affecte pas le capital calculé."),
+    "frais_retrait": ("🏧", "violet", "Frais prélevés automatiquement lors d'un transfert entrant — **diminue** le capital."),
 }
 
 if READ_ONLY:
@@ -161,6 +163,18 @@ else:  # ajustement
             key="mvt_dst_ajustement",
             disabled=READ_ONLY,
         )
+
+st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
+
+# ── Aperçu frais si le compte destination a des frais configurés ────────────
+_frais_dst = compte_frais.get(dst_id, 0.0) if dst_id else 0.0
+if type_mvt == "transfert" and _frais_dst > 0 and dst_id:
+    st.warning(
+        f"🏧 **Frais de retrait automatiques** — Le compte **{noms_cpt.get(dst_id, dst_id)}** "
+        f"applique **{_frais_dst*100:.0f}%** de frais sur les transferts entrants. "
+        f"Un mouvement *frais_retrait* sera créé automatiquement lors de l'enregistrement.",
+        icon=None,
+    )
 
 st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
@@ -257,10 +271,33 @@ if submitted:
             compte_dans_capital=compte_dans_capital,
         )
         if ok:
-            st.success(
-                f"✅ **{type_mvt.capitalize()}** enregistré — "
-                f"**{fmt_gnf(montant_gnf)}** le {date_mvt}"
-            )
+            # Création automatique du mouvement de frais si le compte destination en a
+            frais_pct_dst = compte_frais.get(dst_id, 0.0) if dst_id else 0.0
+            if type_mvt == "transfert" and frais_pct_dst > 0 and dst_id:
+                frais_gnf = round(montant_gnf * frais_pct_dst)
+                nom_dst = noms_cpt.get(dst_id, dst_id)
+                add_mouvement(
+                    date_mvt=date_mvt.isoformat(),
+                    type_mouvement="frais_retrait",
+                    investisseur_id=inv_id,
+                    montant_origine=frais_gnf,
+                    devise_origine="GNF",
+                    taux_eur_gnf=1,
+                    montant_converti_gnf=frais_gnf,
+                    compte_source_id=dst_id,
+                    compte_destination_id="",
+                    commentaire=f"Frais de retrait {frais_pct_dst*100:.0f}% — {nom_dst}",
+                    compte_dans_capital=True,
+                )
+                st.success(
+                    f"✅ **Transfert** enregistré — **{fmt_gnf(montant_gnf)}** le {date_mvt}  \n"
+                    f"🏧 **Frais de retrait** déduits automatiquement : **{fmt_gnf(frais_gnf)}** ({frais_pct_dst*100:.0f}%)"
+                )
+            else:
+                st.success(
+                    f"✅ **{type_mvt.capitalize()}** enregistré — "
+                    f"**{fmt_gnf(montant_gnf)}** le {date_mvt}"
+                )
             st.cache_data.clear()
             st.rerun()
 
