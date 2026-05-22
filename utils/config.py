@@ -1,5 +1,8 @@
 """Configuration globale et constantes de l'application."""
 
+# ── Identité du projet ───────────────────────────────────────────────────────
+PROJECT_NAME = "Legend Farm"
+
 # ── Capital cible ──────────────────────────────────────────────────────────────
 CAPITAL_CIBLE_GNF = 500_000_000  # 500 millions GNF
 
@@ -20,7 +23,7 @@ DEVISE_REFERENCE = "GNF"
 TAUX_EUR_GNF_DEFAUT = 0  # 0 = aucun taux connu, l'utilisateur doit le saisir
 
 # ── Référentiels métier ───────────────────────────────────────────────────────
-TYPES_MOUVEMENT  = ["apport", "transfert", "depense", "retrait", "ajustement", "frais_retrait"]
+TYPES_MOUVEMENT  = ["apport", "transfert", "retrait"]
 TYPES_COMPTE     = ["banque", "espèces", "mobile money", "YMO", "autre"]
 PAYS_DISPONIBLES = ["France", "Guinée", "Belgique", "Sénégal", "Autre"]
 STATUTS_INVESTISSEUR = ["actif", "inactif", "potentiel"]
@@ -89,3 +92,46 @@ COULEUR_BADGE_MOUVEMENT = {
     "ajustement":    ("#92400e", "#fef3c7"),
     "frais_retrait": ("#6b21a8", "#f3e8ff"),
 }
+
+# ── Dépenses avant exploitation ───────────────────────────────────────────────
+SHEET_DEPENSES = "depenses_avant_exploitation"
+COLS_DEPENSES = [
+    "id", "nom", "categorie", "description",
+    "montant_gnf", "compte_utilise", "date",
+    "statut_paiement", "justificatif_note", "date_creation",
+]
+
+CATEGORIES_DEPENSES = [
+    "Formation",
+    "Étude du terrain",
+    "Transport",
+    "Clôture",
+    "Bâtiments",
+    "Forage",
+    "Énergie",
+    "Main-d'œuvre",
+]
+
+CATEGORIES_DEPENSES_DESCRIPTIONS = {
+    "Formation":         "Formation du gestionnaire, accompagnement expert avicole, conseils techniques et déplacements.",
+    "Étude du terrain":  "Visite et analyse du terrain, conseils constructeurs, plan d'implantation.",
+    "Transport":         "Transport des matériaux, déplacements, carburant, livraisons et frais logistiques.",
+    "Clôture":           "Matériaux pour la clôture : briques, ciment, sable, gravier, fer, portail.",
+    "Bâtiments":         "Matériaux pour poulailler, magasins, logement, toilettes, bureau, toiture, portes, fenêtres.",
+    "Forage":            "Forage, pompe, tuyaux, château d'eau, réservoirs et installation d'eau.",
+    "Énergie":           "Panneaux solaires, batteries, câbles, lampes et installation électrique.",
+    "Main-d'œuvre":      "Maçons, ouvriers, électriciens, plombiers, soudeurs, menuisiers et autres artisans.",
+}
+
+COMPTES_GNF_DEPENSES  = ["Ymo", "Orange Money", "Orange Marchand"]
+STATUTS_DEPENSE       = ["Payé", "En attente", "Partiellement payé"]
+
+# ── Frais de retrait cash — barème opérateur (par nom de compte) ──────────────
+# Chaque entrée : liste de (montant_min, montant_max, taux)
+FRAIS_RETRAIT_BAREME: dict = {
+    "Orange Money": [
+        (2_000,      5_000_000,  0.01),   # 1 %
+        (5_000_001, 15_000_000,  0.008),  # 0,80 %
+    ]
+}
+ORANGE_MONEY_MAX_RETRAIT_GNF = 15_000_000

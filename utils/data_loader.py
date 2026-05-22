@@ -24,6 +24,7 @@ if _BACKEND == "sheets":
         get_mouvements, add_mouvement, delete_mouvement,
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
+        get_depenses, add_depense, update_depense, delete_depense,
         is_demo_mode, export_csv,
     )
 else:
@@ -34,6 +35,7 @@ else:
         get_mouvements, add_mouvement, delete_mouvement,
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
+        get_depenses, add_depense, update_depense, delete_depense,
         is_demo_mode, export_csv,
     )
 

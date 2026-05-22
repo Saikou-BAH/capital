@@ -1,1 +1,17 @@
 ﻿id;date;type_mouvement;investisseur_id;compte_source_id;compte_destination_id;montant_origine;devise_origine;taux_eur_gnf;montant_converti_gnf;commentaire;compte_dans_capital;apport_source_id;date_creation
+mvt-1f40059d;2026-01-01;apport;inv-a96f71b3;;cpt-2a19f2ae;1000.0;EUR;10500.0;10500000;C'est le 1er apport pour legend farm;True;;2026-05-22 18:05
+mvt-abf5f3db;2026-01-02;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-8f63cbe8;1000.0;EUR;10500.0;10500000;je fais bouger le 1er apport vers le compte YMO;False;mvt-1f40059d;2026-05-22 18:16
+mvt-663350cc;2026-02-01;apport;inv-a96f71b3;;cpt-2a19f2ae;2757.01;EUR;10700.0;29500007;C'est le 2nd apport pour legend farm;True;;2026-05-22 18:23
+mvt-cfd2ec0d;2026-02-02;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-8f63cbe8;2757.01;EUR;10700.0;29500007;je fais bouger le 2nd apport vers le compte YMO;False;mvt-663350cc;2026-05-22 18:27
+mvt-019f3c58;2026-03-01;apport;inv-a96f71b3;;cpt-2a19f2ae;3000.0;EUR;10750.0;32250000;C'est le 1er apport vers le compte Orange Money;True;;2026-05-22 18:33
+mvt-863f2144;2026-03-02;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;3000.0;EUR;10750.0;32250000;Je fais bouger le 1er apport vers le compte Orange Money;False;mvt-019f3c58;2026-05-22 18:36
+mvt-eca3bafd;2026-04-01;apport;inv-437fd569;;cpt-2a19f2ae;490.0;EUR;10700.0;5243000;C'est le 2nd apport vers le compte Orange Money;True;;2026-05-22 18:39
+mvt-ad52c278;2026-04-02;transfert;inv-437fd569;cpt-2a19f2ae;cpt-0875c45a;490.0;EUR;10700.0;5243000;Je fais bouger le 2nd apport vers le compte Orange Money;False;mvt-eca3bafd;2026-05-22 18:40
+mvt-c7cb9b26;2026-04-03;apport;inv-a96f71b3;;cpt-2a19f2ae;2088.78;EUR;10700.0;22349946;C'est le 3rd apport vers le compte Orange Money;True;;2026-05-22 18:42
+mvt-e39f3ec0;2026-04-04;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;2088.78;EUR;10700.0;22349946;Je fais bouger le 3rd apport vers le compte Orange Money;False;mvt-c7cb9b26;2026-05-22 18:44
+mvt-1674837a;2026-04-05;apport;inv-a96f71b3;;cpt-2a19f2ae;400.0;EUR;10700.0;4280000;C'est le 4rd apport vers le compte Orange Money;True;;2026-05-22 18:51
+mvt-076e8216;2026-04-07;apport;inv-a96f71b3;;cpt-2a19f2ae;21.43;EUR;10600.0;227158;C'est le 5rd apport vers le compte Orange Money;True;;2026-05-22 18:55
+mvt-b5853fbe;2026-04-06;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;400.0;EUR;10700.0;4280000;Je fais bouger le 4rd apport vers le compte Orange Money.;False;mvt-1674837a;2026-05-22 18:57
+mvt-923c0565;2026-04-08;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;21.43;EUR;10600.0;227158;Je fais bouger le 5rd vers le compte Orange Money;False;mvt-076e8216;2026-05-22 19:07
+mvt-02442961;2026-05-01;apport;inv-437fd569;;cpt-2a19f2ae;2450.0;EUR;10500.0;25725000;C'est le 6rd apport vers le compte Orange Money;True;;2026-05-22 20:02
+mvt-1a5b7d0f;2026-05-02;apport;inv-a96f71b3;;cpt-2a19f2ae;1000.0;EUR;10500.0;10500000;C'est le 7rd apport vers le compte orange Money.;True;;2026-05-22 20:03

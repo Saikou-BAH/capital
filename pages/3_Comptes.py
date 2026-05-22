@@ -18,7 +18,6 @@ from utils.formatting import (
 from utils.charts import chart_valeurs_par_compte, chart_repartition_devise
 from utils.runtime import is_read_only_mode, read_only_notice
 
-st.set_page_config(page_title="Comptes", page_icon="🏦", layout="wide")
 inject_css()
 
 st.markdown(page_header("Comptes", "🏦", "Gérez les comptes bancaires et de trésorerie du projet."), unsafe_allow_html=True)
@@ -100,8 +99,6 @@ if filtre_actif == "Actif":
 elif filtre_actif == "Inactif":
     df_display = df_display[df_display["actif"].astype(str).str.lower() != "true"]
 
-st.markdown(section_header("Liste des comptes", "🏦", "#2563EB"), unsafe_allow_html=True)
-
 if df_display.empty:
     st.markdown(
         empty_state("🏦", "Aucun compte trouvé", "Aucun compte ne correspond à ces filtres, ou aucun compte n'a encore été créé."),
@@ -110,32 +107,23 @@ if df_display.empty:
 else:
     ICONES_TYPE = {"banque": "🏦", "espèces": "💵", "mobile money": "📱", "YMO": "📲", "autre": "📂"}
     ICONES_PAYS = {"France": "🇫🇷", "Guinée": "🇬🇳", "Belgique": "🇧🇪", "Sénégal": "🇸🇳"}
-    DEVISE_CLR  = {"EUR": "#2563EB", "GNF": "#059669"}
 
-    # En-têtes
-    h1, h2, h3, h4, h5, h6 = st.columns([3, 2.5, 1.2, 1.8, 2, 2.5])
-    for col, lbl in zip([h1, h2, h3, h4, h5, h6], ["Compte", "Solde estimé", "Devise", "Statut", "Propriétaire", "Description"]):
-        with col:
-            st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
-    st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
-
-    for _, row in df_display.iterrows():
-        is_actif = str(row["actif"]).lower() == "true"
-        icone    = ICONES_TYPE.get(row["type_compte"], "📂")
-        drapeau  = ICONES_PAYS.get(row["pays"], "🌍")
-        proprio  = noms_inv.get(row.get("investisseur_id", ""), "—")
-        solde    = row["solde_gnf"]
-        dev      = str(row["devise"]).upper()
-        dev_clr  = DEVISE_CLR.get(dev, "#64748B")
+    def _render_compte_row(row):
+        is_actif  = str(row["actif"]).lower() == "true"
+        icone     = ICONES_TYPE.get(row["type_compte"], "📂")
+        drapeau   = ICONES_PAYS.get(row["pays"], "🌍")
+        proprio   = noms_inv.get(row.get("investisseur_id", ""), "—")
+        solde     = row["solde_gnf"]
+        dev       = str(row["devise"]).upper()
         solde_fmt = fmt_eur(solde) if dev == "EUR" else fmt_gnf(solde)
         solde_clr = "#059669" if solde > 0 else ("#DC2626" if solde < 0 else "#94A3B8")
-
         frais_pct_val = float(row.get("frais_pct", 0) or 0)
-        c1, c2, c3, c4, c5, c6 = st.columns([3, 2.5, 1.2, 1.8, 2, 2.5])
+
+        c1, c2, c3, c4, c5 = st.columns([3.5, 2.5, 1.8, 2, 2.5])
         with c1:
             frais_badge = (
-                f'<span style="background:#f3e8ff;color:#6b21a8;font-size:.6rem;font-weight:700;'
-                f'padding:.1rem .35rem;border-radius:4px;margin-left:.3rem">🏧 {frais_pct_val*100:.0f}% frais</span>'
+                f'<span style="background:#F5F3FF;color:#7C3AED;font-size:.6rem;font-weight:700;'
+                f'padding:.1rem .35rem;border-radius:4px;margin-left:.35rem">🏧 {frais_pct_val*100:.0f}% frais</span>'
                 if frais_pct_val > 0 else ""
             )
             st.markdown(
@@ -154,13 +142,6 @@ else:
                 unsafe_allow_html=True,
             )
         with c3:
-            st.markdown(
-                f'<div style="font-size:.78rem;font-weight:700;color:{dev_clr};padding-top:.2rem;'
-                f'background:{"#EFF6FF" if dev=="EUR" else "#ECFDF5"};border-radius:5px;'
-                f'display:inline-block;padding:.15rem .4rem">{dev}</div>',
-                unsafe_allow_html=True,
-            )
-        with c4:
             badge_html = (
                 '<span style="background:#ECFDF5;color:#059669;font-size:.65rem;font-weight:700;'
                 'padding:.15rem .4rem;border-radius:5px">Actif</span>'
@@ -169,12 +150,45 @@ else:
                 'padding:.15rem .4rem;border-radius:5px">Inactif</span>'
             )
             st.markdown(f'<div style="padding-top:.2rem">{badge_html}</div>', unsafe_allow_html=True)
-        with c5:
+        with c4:
             st.markdown(f'<div class="row-comment" style="padding-top:.2rem">{proprio}</div>', unsafe_allow_html=True)
-        with c6:
+        with c5:
             st.markdown(f'<div class="row-comment" style="padding-top:.2rem">{str(row.get("description",""))[:55]}</div>', unsafe_allow_html=True)
-
         st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.3rem 0">', unsafe_allow_html=True)
+
+    def _render_section(df_sec, title, color):
+        if df_sec.empty:
+            return
+        st.markdown(section_header(title, "", color), unsafe_allow_html=True)
+        h1, h2, h3, h4, h5 = st.columns([3.5, 2.5, 1.8, 2, 2.5])
+        for col, lbl in zip([h1, h2, h3, h4, h5], ["Compte", "Solde estimé", "Statut", "Propriétaire", "Description"]):
+            with col:
+                st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
+        st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
+        for _, row in df_sec.iterrows():
+            _render_compte_row(row)
+
+    # Groupement par devise
+    df_eur = df_display[df_display["devise"].astype(str).str.upper() == "EUR"]
+    df_gnf = df_display[df_display["devise"].astype(str).str.upper() == "GNF"]
+    df_gnf_frais   = df_gnf[df_gnf["frais_pct"].apply(lambda x: float(x or 0)) > 0]
+    df_gnf_normal  = df_gnf[df_gnf["frais_pct"].apply(lambda x: float(x or 0)) == 0]
+    df_other = df_display[~df_display["devise"].astype(str).str.upper().isin(["EUR", "GNF"])]
+
+    if not df_eur.empty:
+        _render_section(df_eur, f"Comptes en EUR  ({len(df_eur)})", "#2563EB")
+        st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+
+    if not df_gnf_normal.empty:
+        _render_section(df_gnf_normal, f"Comptes en GNF  ({len(df_gnf_normal)})", "#059669")
+        st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+
+    if not df_gnf_frais.empty:
+        _render_section(df_gnf_frais, f"Comptes GNF avec frais  ({len(df_gnf_frais)})", "#7C3AED")
+        st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+
+    if not df_other.empty:
+        _render_section(df_other, f"Autres comptes  ({len(df_other)})", "#475569")
 
 st.markdown(divider(), unsafe_allow_html=True)
 

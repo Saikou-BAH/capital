@@ -2,7 +2,7 @@
 
 import pandas as pd
 from datetime import date
-from utils.config import TAUX_EUR_GNF_DEFAUT, CAPITAL_CIBLE_GNF
+from utils.config import TAUX_EUR_GNF_DEFAUT, CAPITAL_CIBLE_GNF, FRAIS_RETRAIT_BAREME
 
 
 # ── Conversion de devises ─────────────────────────────────────────────────────
@@ -487,6 +487,36 @@ def get_apports_disponibles(df_mvt: pd.DataFrame) -> pd.DataFrame:
     apports["eur_transfere"] = pd.to_numeric(apports["eur_transfere"], errors="coerce").fillna(0.0)
     apports["eur_restant"] = apports["montant_origine"] - apports["eur_transfere"]
     return apports[apports["eur_restant"] > 0.01].copy()
+
+
+def get_frais_retrait_cash(nom_compte: str, montant_gnf: float) -> tuple:
+    """
+    Retourne (taux, frais_gnf) pour un retrait cash selon le barème de l'opérateur.
+    Retourne (None, None) si hors tranche ou aucun barème pour ce compte.
+    """
+    for min_m, max_m, taux in FRAIS_RETRAIT_BAREME.get(nom_compte, []):
+        if min_m <= montant_gnf <= max_m:
+            return taux, round(montant_gnf * taux)
+    return None, None
+
+
+def get_transferts_gnf_sur_compte(compte_id: str, df_mvt: pd.DataFrame) -> pd.DataFrame:
+    """Retourne les transferts EUR→GNF reçus sur un compte GNF, avec leur apport source."""
+    if df_mvt is None or df_mvt.empty or not compte_id:
+        return pd.DataFrame()
+
+    df = df_mvt.copy()
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    if "apport_source_id" not in df.columns:
+        return pd.DataFrame()
+    df["apport_source_id"] = df["apport_source_id"].astype(str).str.strip()
+
+    return df[
+        (df["type_mouvement"] == "transfert") &
+        (df["compte_destination_id"].astype(str).str.strip() == str(compte_id)) &
+        (df["devise_origine"].astype(str).str.upper() == "EUR") &
+        (~df["apport_source_id"].isin(["", "nan", "None"]))
+    ].copy()
 
 
 def calcul_valeur_apport(apport_id: str, df_mvt: pd.DataFrame) -> dict:

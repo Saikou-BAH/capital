@@ -14,9 +14,9 @@ import pandas as pd
 
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
-    COLS_OBJECTIFS, COLS_TAUX,
+    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
-    SHEET_OBJECTIFS, SHEET_TAUX,
+    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES,
 )
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -252,6 +252,38 @@ def add_taux(date_taux: str, eur_to_gnf: float, commentaire: str = "") -> bool:
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
     return _append_csv(SHEET_TAUX, COLS_TAUX, row)
+
+
+# ── API publique — Dépenses avant exploitation ────────────────────────────────
+
+def get_depenses() -> pd.DataFrame:
+    return _read_csv(SHEET_DEPENSES, COLS_DEPENSES)
+
+
+def add_depense(nom: str, categorie: str, description: str, montant_gnf: float,
+                compte_utilise: str, date_dep: str, statut_paiement: str,
+                justificatif_note: str = "") -> bool:
+    row = {
+        "id":                _new_id("dep-"),
+        "nom":               nom,
+        "categorie":         categorie,
+        "description":       description,
+        "montant_gnf":       str(montant_gnf),
+        "compte_utilise":    compte_utilise,
+        "date":              date_dep,
+        "statut_paiement":   statut_paiement,
+        "justificatif_note": justificatif_note,
+        "date_creation":     datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    return _append_csv(SHEET_DEPENSES, COLS_DEPENSES, row)
+
+
+def update_depense(dep_id: str, updates: dict) -> bool:
+    return _update_csv(SHEET_DEPENSES, COLS_DEPENSES, dep_id, updates)
+
+
+def delete_depense(dep_id: str) -> bool:
+    return _delete_csv(SHEET_DEPENSES, COLS_DEPENSES, dep_id)
 
 
 # ── Export CSV ────────────────────────────────────────────────────────────────

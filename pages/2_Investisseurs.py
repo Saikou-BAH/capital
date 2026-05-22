@@ -22,7 +22,6 @@ from utils.charts import (
 )
 from utils.runtime import is_read_only_mode, read_only_notice
 
-st.set_page_config(page_title="Investisseurs", page_icon="👥", layout="wide")
 inject_css()
 
 st.markdown(page_header("Investisseurs", "👥", "Gérez les membres du projet et suivez leurs apports."), unsafe_allow_html=True)

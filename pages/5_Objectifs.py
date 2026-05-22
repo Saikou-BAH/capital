@@ -17,7 +17,6 @@ from utils.formatting import (
 from utils.charts import chart_objectifs_gauge
 from utils.runtime import is_read_only_mode, read_only_notice
 
-st.set_page_config(page_title="Objectifs", page_icon="🎯", layout="wide")
 inject_css()
 
 st.markdown(page_header("Objectifs", "🎯", "Suivez la progression vers les cibles de capital."), unsafe_allow_html=True)

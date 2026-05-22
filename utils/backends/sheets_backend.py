@@ -19,9 +19,9 @@ from google.oauth2.service_account import Credentials
 
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
-    COLS_OBJECTIFS, COLS_TAUX,
+    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
-    SHEET_OBJECTIFS, SHEET_TAUX,
+    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES,
 )
 
 load_dotenv()
@@ -256,3 +256,26 @@ def add_taux(date_taux: str, eur_to_gnf: float, commentaire: str = "") -> bool:
 
 def export_csv(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False, sep=";", decimal=",", encoding="utf-8-sig").encode("utf-8-sig")
+
+
+# ── API publique — Dépenses avant exploitation ────────────────────────────────
+
+def get_depenses() -> pd.DataFrame:
+    return _read_sheet(SHEET_DEPENSES, COLS_DEPENSES)
+
+def add_depense(nom: str, categorie: str, description: str, montant_gnf: float,
+                compte_utilise: str, date_dep: str, statut_paiement: str,
+                justificatif_note: str = "") -> bool:
+    return _add_row(SHEET_DEPENSES, COLS_DEPENSES, {
+        "id": _new_id("dep-"), "nom": nom, "categorie": categorie,
+        "description": description, "montant_gnf": str(montant_gnf),
+        "compte_utilise": compte_utilise, "date": date_dep,
+        "statut_paiement": statut_paiement, "justificatif_note": justificatif_note,
+        "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+
+def update_depense(dep_id: str, updates: dict) -> bool:
+    return _update_row(SHEET_DEPENSES, COLS_DEPENSES, dep_id, updates)
+
+def delete_depense(dep_id: str) -> bool:
+    return _delete_row(SHEET_DEPENSES, COLS_DEPENSES, dep_id)

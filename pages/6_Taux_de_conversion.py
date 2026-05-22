@@ -13,7 +13,6 @@ from utils.formatting import (
 from utils.charts import chart_historique_taux
 from utils.runtime import is_read_only_mode, read_only_notice
 
-st.set_page_config(page_title="Taux de conversion", page_icon="💱", layout="wide")
 inject_css()
 
 st.markdown(page_header("Taux de conversion", "💱", "Historique des taux EUR → GNF et simulateur de conversion."), unsafe_allow_html=True)

@@ -4,23 +4,20 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-from utils.config import TYPES_MOUVEMENT, DEVISES, TAUX_EUR_GNF_DEFAUT
+from utils.config import TYPES_MOUVEMENT, DEVISES, TAUX_EUR_GNF_DEFAUT, FRAIS_RETRAIT_BAREME, ORANGE_MONEY_MAX_RETRAIT_GNF
 from utils.data_loader import (
     get_mouvements, get_investisseurs, get_comptes, get_taux, add_mouvement,
 )
-from utils.calculs import convertir_en_gnf, get_dernier_taux, get_apports_disponibles, calcul_valeur_apport
+from utils.calculs import convertir_en_gnf, get_dernier_taux, get_apports_disponibles, calcul_valeur_apport, get_transferts_gnf_sur_compte, get_frais_retrait_cash
 from utils.formatting import (
-    inject_css, kpi_card, section_header, fmt_gnf, fmt_eur, fmt_taux,
-    badge_mouvement, divider, spacer,
+    inject_css, kpi_card, page_header, section_header, preview_card,
+    fmt_gnf, fmt_eur, fmt_taux, badge_mouvement, divider, spacer,
 )
 from utils.charts import chart_frais_retrait_par_mois
 from utils.runtime import is_read_only_mode, read_only_notice
 
-st.set_page_config(page_title="Mouvements", page_icon="💸", layout="wide")
 inject_css()
-
-st.markdown("## 💸 Mouvements")
-st.markdown(divider(), unsafe_allow_html=True)
+st.markdown(page_header("Mouvements", "💸", "Enregistrez vos apports, transferts et retraits."), unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
 def load():
@@ -79,31 +76,52 @@ st.markdown(section_header("Enregistrer un mouvement", "➕", "#2563EB"), unsafe
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
 TYPE_HELP = {
-    "apport":        ("💰", "green",  "Nouvel argent injecté dans le projet — **augmente** le capital total."),
-    "transfert":     ("↔️", "blue",   "Argent existant déplacé d'un compte à un autre — **ne change pas** le capital."),
-    "depense":       ("💸", "red",    "Dépense payée depuis un compte — **diminue** le capital net disponible."),
-    "retrait":       ("📤", "amber",  "Argent qui sort du projet — **diminue** le capital total."),
-    "ajustement":    ("🔧", "violet", "Correction d'une erreur — n'affecte pas le capital calculé."),
-    "frais_retrait": ("🏧", "violet", "Frais prélevés automatiquement lors d'un transfert entrant — **diminue** le capital."),
+    "apport":    ("💰", "green",  "Nouvel argent injecté dans le projet — **augmente** le capital total."),
+    "transfert": ("↔️", "blue",   "Argent existant déplacé d'un compte à un autre — **ne change pas** le capital."),
+    "retrait":   ("📤", "amber",  "Argent qui sort du projet — **diminue** le capital total."),
 }
 
 if READ_ONLY:
     read_only_notice("L'enregistrement des mouvements")
 
-# Type selector OUTSIDE the form so it triggers reruns and drives field visibility
-type_mvt = st.selectbox(
-    "Type de mouvement *",
+# ── Étape 1 : Type de mouvement ───────────────────────────────────────────────
+st.markdown(
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+    'color:#94A3B8;margin-bottom:.4rem">Étape 1 — Type de mouvement</div>',
+    unsafe_allow_html=True,
+)
+type_mvt = st.radio(
+    "Type de mouvement",
     TYPES_MOUVEMENT,
+    horizontal=True,
     key="type_mvt_select",
     disabled=READ_ONLY,
+    label_visibility="collapsed",
 )
 icn, clr, txt = TYPE_HELP.get(type_mvt, ("ℹ️", "blue", ""))
-st.info(f"{icn} {txt}", icon=None)
-st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
+st.markdown(spacer("0.15rem"), unsafe_allow_html=True)
+
+# Indicateur visuel du type sélectionné
+_type_colors = {"apport": ("#059669", "#ECFDF5", "#A7F3D0"), "transfert": ("#2563EB", "#EFF6FF", "#BFDBFE"), "retrait": ("#D97706", "#FFFBEB", "#FDE68A")}
+_tc, _tbg, _tbr = _type_colors.get(type_mvt, ("#475569", "#F8FAFC", "#CBD5E1"))
+st.markdown(
+    f'<div style="background:{_tbg};border:1px solid {_tbr};border-radius:8px;'
+    f'padding:.45rem .85rem;font-size:.83rem;color:{_tc};font-weight:500;margin-bottom:.5rem">'
+    f'{icn} {txt.replace("**", "")}</div>',
+    unsafe_allow_html=True,
+)
+
+# ── Étape 2 : Comptes ────────────────────────────────────────────────────────
+st.markdown(
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 2 — Comptes & investisseur</div>',
+    unsafe_allow_html=True,
+)
 
 cpt_opts     = {cid: nm for cid, nm in noms_cpt.items()}
 cpt_opts_eur = {cid: nm for cid, nm in noms_cpt.items() if compte_devises.get(cid, "") == "EUR"}
 cpt_opts_gnf = {cid: nm for cid, nm in noms_cpt.items() if compte_devises.get(cid, "") == "GNF"}
+gnf_disponible_src = None  # disponible sur le transfert GNF source sélectionné
 
 # ── Ligne 1 : date + investisseur ──────────────────────────────────────────
 r1c1, r1c2 = st.columns([2, 3])
@@ -124,6 +142,7 @@ st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 # ── Ligne 2 : comptes (selon type) ─────────────────────────────────────────
 if type_mvt == "apport":
     sel_apport_id = ""
+    gnf_transfer_link_id = ""
     if not cpt_opts_eur:
         st.warning("Aucun compte en EUR disponible. Créez d'abord un compte en EUR dans la page Comptes.", icon=None)
     dst_id = st.selectbox(
@@ -137,6 +156,7 @@ if type_mvt == "apport":
 
 elif type_mvt in ("depense", "retrait"):
     sel_apport_id = ""
+    gnf_transfer_link_id = ""
     src_id = st.selectbox(
         "Compte source *",
         options=[""] + list(cpt_opts.keys()),
@@ -214,6 +234,7 @@ elif type_mvt == "transfert":
                 key="mvt_dst_transfert_apport",
                 disabled=READ_ONLY,
             )
+        gnf_transfer_link_id = ""
     else:
         # Transfert interne GNF
         sel_apport_id = ""
@@ -234,16 +255,83 @@ elif type_mvt == "transfert":
                 key="mvt_dst_transfert_interne",
                 disabled=READ_ONLY,
             )
-        inv_id = st.selectbox(
-            "Investisseur *",
-            options=list(noms_inv.keys()) if noms_inv else [""],
-            format_func=lambda x: noms_inv.get(x, x),
-            key="mvt_inv_interne",
-            disabled=READ_ONLY,
-        )
+
+        # Option : lier à un transfert EUR→GNF entrant pour traçabilité apport
+        df_transferts_src = get_transferts_gnf_sur_compte(src_id, df_mvt) if src_id else pd.DataFrame()
+        if not df_transferts_src.empty:
+            def _fmt_transfert_gnf(tid):
+                if not tid:
+                    return "— Sans liaison —"
+                row = df_transferts_src[df_transferts_src["id"] == tid]
+                if row.empty:
+                    return str(tid)
+                r = row.iloc[0]
+                inv_nm = noms_inv.get(str(r["investisseur_id"]), str(r["investisseur_id"]))
+                gnf = float(r["montant_converti_gnf"])
+                dt = str(r.get("date", ""))[:10]
+                return f"{inv_nm} — {gnf:,.0f} GNF reçus le {dt}"
+
+            sel_transfert_gnf_id = st.selectbox(
+                "Lier à un transfert entrant (optionnel)",
+                options=[""] + list(df_transferts_src["id"]),
+                format_func=_fmt_transfert_gnf,
+                key="mvt_lier_transfert_gnf",
+                disabled=READ_ONLY,
+            )
+
+            if sel_transfert_gnf_id:
+                row_t = df_transferts_src[df_transferts_src["id"] == sel_transfert_gnf_id].iloc[0]
+                gnf_transfer_link_id = str(row_t["apport_source_id"])
+                inv_id = str(row_t["investisseur_id"])
+                nom_inv_t = noms_inv.get(inv_id, inv_id)
+                gnf_recu = float(row_t["montant_converti_gnf"])
+                dt_t = str(row_t.get("date", ""))[:10]
+
+                # Calcul du solde GNF déjà re-transféré depuis ce compte pour ce même apport
+                _deja_gnf = pd.to_numeric(
+                    df_mvt[
+                        (df_mvt["type_mouvement"] == "transfert") &
+                        (df_mvt["compte_source_id"].astype(str) == str(src_id)) &
+                        (df_mvt["apport_source_id"].astype(str) == gnf_transfer_link_id) &
+                        (df_mvt["devise_origine"].astype(str).str.upper() == "GNF")
+                    ]["montant_origine"],
+                    errors="coerce",
+                ).sum()
+                gnf_disponible_src = max(0.0, gnf_recu - _deja_gnf)
+
+                st.markdown(
+                    f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
+                    f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
+                    f'<span>👤 <strong>{nom_inv_t}</strong></span>'
+                    f'<span>📅 Reçu le <strong>{dt_t}</strong></span>'
+                    f'<span>💰 Total reçu : <strong>{gnf_recu:,.0f} GNF</strong></span>'
+                    f'<span>✅ Disponible : <strong style="color:#065F46">{gnf_disponible_src:,.0f} GNF</strong></span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
+            else:
+                gnf_transfer_link_id = ""
+                inv_id = st.selectbox(
+                    "Investisseur *",
+                    options=list(noms_inv.keys()) if noms_inv else [""],
+                    format_func=lambda x: noms_inv.get(x, x),
+                    key="mvt_inv_interne",
+                    disabled=READ_ONLY,
+                )
+        else:
+            gnf_transfer_link_id = ""
+            inv_id = st.selectbox(
+                "Investisseur *",
+                options=list(noms_inv.keys()) if noms_inv else [""],
+                format_func=lambda x: noms_inv.get(x, x),
+                key="mvt_inv_interne",
+                disabled=READ_ONLY,
+            )
 
 else:  # ajustement / frais_retrait
     sel_apport_id = ""
+    gnf_transfer_link_id = ""
     cs1, cs2 = st.columns(2)
     with cs1:
         src_id = st.selectbox(
@@ -264,19 +352,16 @@ else:  # ajustement / frais_retrait
 
 st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
-# ── Aperçu frais si le compte destination a des frais configurés ────────────
 _frais_dst = compte_frais.get(dst_id, 0.0) if dst_id else 0.0
-if type_mvt == "transfert" and _frais_dst > 0 and dst_id:
-    st.warning(
-        f"🏧 **Frais de retrait automatiques** — Le compte **{noms_cpt.get(dst_id, dst_id)}** "
-        f"applique **{_frais_dst*100:.0f}%** de frais sur les transferts entrants. "
-        f"Un mouvement *frais_retrait* sera créé automatiquement lors de l'enregistrement.",
-        icon=None,
-    )
 
-st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
+# ── Étape 3 : Montant ────────────────────────────────────────────────────────
+st.markdown(
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 3 — Montant</div>',
+    unsafe_allow_html=True,
+)
 
-# ── Ligne 3 : montant + devise + taux + résultat ───────────────────────────
+# ── Ligne montant + devise + taux + résultat ──────────────────────────────
 _transfert_apport_mode = (type_mvt == "transfert" and bool(sel_apport_id))
 _eur_max = apport_detail.get("eur_restant", 0.0) if _transfert_apport_mode else 0.0
 
@@ -328,8 +413,98 @@ with cm4:
         unsafe_allow_html=True,
     )
 
+# ── Étape 4 : Aperçu automatique ────────────────────────────────────────────
+_preview_rows = []
+_preview_color = "blue"
+_preview_footer = ""
+
+# Preview gain/perte de taux (transfert EUR depuis un apport)
+if _transfert_apport_mode and montant > 0 and taux > 0:
+    taux_estimatif = apport_detail.get("taux_estimatif", 0.0)
+    if taux_estimatif and taux_estimatif > 0:
+        gnf_estime = montant * taux_estimatif
+        gnf_reel   = montant_gnf
+        gain       = gnf_reel - gnf_estime
+        gain_pct   = (gain / gnf_estime * 100) if gnf_estime else 0.0
+        gain_color = "green" if gain > 1 else ("red" if gain < -1 else "slate")
+        gain_icon  = "📈" if gain > 1 else ("📉" if gain < -1 else "=")
+        gain_label = "Gain de taux" if gain > 1 else ("Perte de taux" if gain < -1 else "Égalité")
+        gain_txt   = (f"+{fmt_gnf(gain)}" if gain > 1 else (fmt_gnf(gain) if gain < -1 else "—"))
+        _preview_rows = [
+            ("Montant envoyé (EUR)",  fmt_eur(montant),             "slate"),
+            ("Taux appliqué",         f"{taux:,.0f} GNF/€",         "slate"),
+            ("Montant converti GNF",  fmt_gnf(gnf_reel),            "blue"),
+            ("Taux estimatif apport", f"{taux_estimatif:,.0f} GNF/€", "slate"),
+            ("GNF estimé",            fmt_gnf(gnf_estime),          "slate"),
+            (f"{gain_icon} {gain_label}",  f"{gain_txt} ({gain_pct:+.2f}%)" if abs(gain) > 1 else gain_txt, gain_color),
+        ]
+        _preview_color = gain_color
+        _preview_footer = "Impact sur le capital : +{} GNF".format(fmt_gnf(gnf_reel))
+
+# Preview frais de retrait cash (Orange Money)
+_nom_src = noms_cpt.get(src_id, "") if src_id else ""
+_frais_cash_taux: float | None = None
+_frais_cash_gnf:  float | None = None
+
+if type_mvt == "retrait" and _nom_src in FRAIS_RETRAIT_BAREME and montant_gnf > 0:
+    if montant_gnf > ORANGE_MONEY_MAX_RETRAIT_GNF:
+        st.error(
+            f"🚫 **Plafond dépassé** — Orange Money limite les retraits à "
+            f"**{ORANGE_MONEY_MAX_RETRAIT_GNF:,.0f} GNF** par opération.",
+            icon=None,
+        )
+    else:
+        _frais_cash_taux, _frais_cash_gnf = get_frais_retrait_cash(_nom_src, montant_gnf)
+        if _frais_cash_taux is not None and _frais_cash_gnf is not None:
+            _net_cash = montant_gnf - _frais_cash_gnf
+            _tranche_txt = (
+                "2 000 → 5 000 000 GNF" if montant_gnf <= 5_000_000
+                else "5 000 001 → 15 000 000 GNF"
+            )
+            _preview_rows = [
+                ("Montant retiré",      fmt_gnf(montant_gnf),       "slate"),
+                ("Compte source",       _nom_src,                   "slate"),
+                ("Taux frais",          f"{_frais_cash_taux*100:.2g}%  ·  tranche {_tranche_txt}", "amber"),
+                ("Frais prélevés",      fmt_gnf(_frais_cash_gnf),   "violet"),
+                ("Net reçu en espèces", fmt_gnf(_net_cash),         "green"),
+            ]
+            _preview_color = "violet"
+            _preview_footer = f"Impact capital : −{fmt_gnf(_frais_cash_gnf)} (frais) · −{fmt_gnf(montant_gnf)} (retrait)"
+
+# Preview frais sur transfert entrant
+elif type_mvt == "transfert" and _frais_dst > 0 and dst_id and montant_gnf > 0:
+    _frais_dst_gnf = round(montant_gnf * _frais_dst)
+    _net_dst = montant_gnf - _frais_dst_gnf
+    _preview_rows = [
+        ("Montant envoyé",          fmt_gnf(montant_gnf),      "slate"),
+        ("Compte destination",      noms_cpt.get(dst_id, dst_id), "slate"),
+        ("Taux frais appliqué",     f"{_frais_dst*100:.0f}%",  "amber"),
+        ("Frais prélevés",          fmt_gnf(_frais_dst_gnf),   "violet"),
+        ("Montant réellement reçu", fmt_gnf(_net_dst),         "green"),
+    ]
+    _preview_color = "amber"
+    _preview_footer = f"Un mouvement frais_retrait de {fmt_gnf(_frais_dst_gnf)} sera créé automatiquement."
+
+if _preview_rows and montant_gnf > 0:
+    st.markdown(
+        '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+        'color:#94A3B8;margin:.75rem 0 .4rem">Étape 4 — Aperçu de l\'opération</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        preview_card("Simulation avant validation", _preview_rows, _preview_color, _preview_footer),
+        unsafe_allow_html=True,
+    )
+
+# ── Étape 5 : Valider ─────────────────────────────────────────────────────────
+st.markdown(
+    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
+    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 5 — Commentaire & validation</div>',
+    unsafe_allow_html=True,
+)
+
 commentaire = st.text_area("Commentaire", placeholder="Description du mouvement…", height=70, key="mvt_commentaire", disabled=READ_ONLY)
-compte_dans_capital = type_mvt in ("apport", "depense", "retrait")
+compte_dans_capital = type_mvt in ("apport", "retrait")
 
 submitted = st.button("💾  Enregistrer le mouvement", type="primary", key="mvt_submit", disabled=READ_ONLY)
 if submitted:
@@ -347,6 +522,12 @@ if submitted:
             errors.append("Un apport en EUR doit être enregistré vers un compte en EUR.")
     if type_mvt in ("depense", "retrait") and not src_id:
         errors.append("Une dépense requiert un compte source.")
+    if type_mvt == "retrait" and src_id and _nom_src in FRAIS_RETRAIT_BAREME:
+        if montant_gnf > ORANGE_MONEY_MAX_RETRAIT_GNF:
+            errors.append(
+                f"Impossible de retirer plus de {ORANGE_MONEY_MAX_RETRAIT_GNF:,.0f} GNF "
+                f"en une seule opération sur Orange Money."
+            )
     if type_mvt == "transfert":
         if not src_id or not dst_id:
             errors.append("Un transfert requiert un compte source ET un compte destination.")
@@ -365,6 +546,12 @@ if submitted:
                     errors.append("Le transfert interne GNF doit être saisi en GNF.")
                 if src_dev == "EUR" and devise != "EUR":
                     errors.append("Le transfert interne EUR doit être saisi en EUR.")
+                if src_dev == "GNF" and gnf_transfer_link_id and gnf_disponible_src is not None:
+                    if montant > gnf_disponible_src + 0.01:
+                        errors.append(
+                            f"Le montant ({montant:,.0f} GNF) dépasse le disponible "
+                            f"({gnf_disponible_src:,.0f} GNF) sur ce transfert source."
+                        )
             else:
                 errors.append(
                     "Seuls les transferts internes par devise et les transferts EUR→GNF sont pris en charge."
@@ -374,7 +561,7 @@ if submitted:
         for e in errors:
             st.error(e)
     else:
-        _apport_src = sel_apport_id if (type_mvt == "transfert" and _transfert_apport_mode) else ""
+        _apport_src = sel_apport_id if _transfert_apport_mode else gnf_transfer_link_id
         ok = add_mouvement(
             date_mvt=date_mvt.isoformat(), type_mouvement=type_mvt,
             investisseur_id=inv_id, montant_origine=montant,
@@ -407,6 +594,26 @@ if submitted:
                 st.success(
                     f"✅ **Transfert** enregistré — **{fmt_gnf(montant_gnf)}** le {date_mvt}  \n"
                     f"🏧 **Frais de retrait** déduits automatiquement : **{fmt_gnf(frais_gnf)}** ({frais_pct_dst*100:.0f}%)"
+                )
+            elif type_mvt == "retrait" and _frais_cash_gnf and _frais_cash_gnf > 0:
+                add_mouvement(
+                    date_mvt=date_mvt.isoformat(),
+                    type_mouvement="frais_retrait",
+                    investisseur_id=inv_id,
+                    montant_origine=_frais_cash_gnf,
+                    devise_origine="GNF",
+                    taux_eur_gnf=1,
+                    montant_converti_gnf=_frais_cash_gnf,
+                    compte_source_id=src_id,
+                    compte_destination_id="",
+                    commentaire=f"Frais retrait {_frais_cash_taux*100:.2g}% — {_nom_src}",
+                    compte_dans_capital=True,
+                    apport_source_id="",
+                )
+                st.success(
+                    f"✅ **Retrait** enregistré — **{fmt_gnf(montant_gnf)}** le {date_mvt}  \n"
+                    f"🏧 **Frais de retrait** déduits automatiquement : "
+                    f"**{fmt_gnf(_frais_cash_gnf)}** ({_frais_cash_taux*100:.2g}%)"
                 )
             else:
                 st.success(

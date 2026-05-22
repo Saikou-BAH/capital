@@ -5,17 +5,25 @@ Adapté à un usage financier / suivi de capital : sobre, rassurant, SaaS.
 """
 
 import streamlit as st
-from utils.config import COULEUR_BADGE_MOUVEMENT, EMOJI_MOUVEMENT
+from utils.config import COULEUR_BADGE_MOUVEMENT, EMOJI_MOUVEMENT, PROJECT_NAME
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 _ACCENT = {
-    "blue":   ("#2563EB", "#EFF6FF", "#BFDBFE"),
-    "green":  ("#059669", "#ECFDF5", "#A7F3D0"),
-    "amber":  ("#D97706", "#FFFBEB", "#FDE68A"),
-    "red":    ("#DC2626", "#FEF2F2", "#FECACA"),
-    "violet": ("#7C3AED", "#F5F3FF", "#DDD6FE"),
-    "slate":  ("#475569", "#F8FAFC", "#CBD5E1"),
+    "navy":   ("#0F172A", "#F8FAFC", "#334155"),  # structure, titres forts
+    "blue":   ("#2563EB", "#EFF6FF", "#BFDBFE"),  # action principale, info
+    "green":  ("#059669", "#ECFDF5", "#A7F3D0"),  # positif, disponible, reçu
+    "red":    ("#DC2626", "#FEF2F2", "#FECACA"),  # dépenses, sorties, erreurs
+    "amber":  ("#D97706", "#FFFBEB", "#FDE68A"),  # attente, attention, frais
+    "teal":   ("#0D9488", "#F0FDFA", "#99F6E4"),  # forage, eau
+    "orange": ("#EA580C", "#FFF7ED", "#FED7AA"),  # énergie, chantier
+    "violet": ("#7C3AED", "#F5F3FF", "#DDD6FE"),  # frais, outils
+    "slate":  ("#475569", "#F8FAFC", "#CBD5E1"),  # neutre, texte, bordures
 }
+
+
+def accent_colors() -> dict:
+    """Retourne la palette complète pour usage externe."""
+    return dict(_ACCENT)
 
 # ── Formatage ─────────────────────────────────────────────────────────────────
 
@@ -98,47 +106,74 @@ h2 { font-size: 1.1rem !important; font-weight: 700 !important; color: #1E293B !
 h3 { font-size: .95rem !important; font-weight: 600 !important; color: #334155 !important; }
 p  { color: #475569 !important; font-size: .875rem !important; }
 
-/* ── Sidebar premium ── */
+/* ── Sidebar premium — navy professionnel ── */
 section[data-testid="stSidebar"] {
-    background: #0F172A !important;
-    border-right: 1px solid rgba(255,255,255,0.06) !important;
-    min-width: 240px !important;
+    background: linear-gradient(180deg, #0F172A 0%, #111827 100%) !important;
+    border-right: 1px solid rgba(255,255,255,0.05) !important;
+    min-width: 248px !important;
 }
 section[data-testid="stSidebar"] > div { background: transparent !important; }
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] small { color: #94A3B8 !important; font-size: .82rem !important; }
+section[data-testid="stSidebar"] small {
+    color: #94A3B8 !important;
+    font-size: .81rem !important;
+}
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 { color: #F1F5F9 !important; }
 
-/* Sidebar nav */
-[data-testid="stSidebarNav"] { padding: .5rem 0 !important; }
+/* Sidebar — logo / titre application */
+[data-testid="stSidebarHeader"] {
+    padding: 1rem .75rem .75rem !important;
+    border-bottom: 1px solid rgba(255,255,255,.06) !important;
+    margin-bottom: .25rem !important;
+}
+
+/* Sidebar nav items */
+[data-testid="stSidebarNav"] { padding: .25rem 0 !important; }
 [data-testid="stSidebarNav"] a {
     display: flex !important;
     align-items: center !important;
     gap: .5rem !important;
-    border-radius: 8px !important;
-    padding: .5rem .85rem !important;
+    border-radius: 7px !important;
+    padding: .45rem .8rem !important;
     margin: 1px .5rem !important;
     color: #94A3B8 !important;
-    font-size: .82rem !important;
+    font-size: .81rem !important;
     font-weight: 500 !important;
     text-decoration: none !important;
     transition: background .15s, color .15s !important;
+    letter-spacing: .01em !important;
 }
 [data-testid="stSidebarNav"] a:hover {
-    background: rgba(255,255,255,.07) !important;
-    color: #E2E8F0 !important;
+    background: rgba(255,255,255,.06) !important;
+    color: #CBD5E1 !important;
 }
 [data-testid="stSidebarNav"] a[aria-selected="true"] {
-    background: rgba(37,99,235,.2) !important;
+    background: rgba(37,99,235,.18) !important;
     color: #93C5FD !important;
     font-weight: 600 !important;
     box-shadow: inset 3px 0 0 #3B82F6 !important;
 }
-[data-testid="stSidebarNavSeparator"] { border-color: rgba(255,255,255,.06) !important; }
+/* Sidebar group labels */
+[data-testid="stSidebarNavSeparator"] {
+    border-color: rgba(255,255,255,.05) !important;
+    margin: .35rem .75rem !important;
+}
+[data-testid="stSidebarNavLink"] + [data-testid="stSidebarNavSeparator"] { margin-top: .5rem !important; }
+
+/* Group title styling */
+section[data-testid="stSidebar"] [data-testid="stSidebarNavItems"] > div > div > span {
+    font-size: .62rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: .12em !important;
+    color: #475569 !important;
+    padding: .5rem .8rem .2rem !important;
+    display: block !important;
+}
 
 /* ── Page title area (h2 on each page) ── */
 .stApp .main .block-container h2:first-of-type {
@@ -514,6 +549,102 @@ button[kind="secondary"]:hover {
 
 /* Spinner */
 [data-testid="stSpinner"] { color: #2563EB !important; }
+
+/* ── Tabs — pill style ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: #F1F5F9 !important;
+    border-radius: 10px !important;
+    padding: .25rem !important;
+    gap: 2px !important;
+    border: none !important;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 7px !important;
+    color: #64748B !important;
+    font-size: .8rem !important;
+    font-weight: 600 !important;
+    padding: .4rem 1rem !important;
+    border: none !important;
+    outline: none !important;
+    transition: background .15s, color .15s !important;
+}
+.stTabs [aria-selected="true"] {
+    background: #fff !important;
+    color: #0F172A !important;
+    box-shadow: 0 1px 3px rgba(15,23,42,.12) !important;
+}
+.stTabs [data-baseweb="tab"]:hover:not([aria-selected="true"]) {
+    background: rgba(255,255,255,.55) !important;
+    color: #334155 !important;
+}
+.stTabs [data-baseweb="tab-border"],
+.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+.stTabs [data-testid="stTabsContent"] { padding-top: .75rem !important; }
+
+/* ── Radio — segmented control ── */
+[data-testid="stRadio"] [role="radiogroup"] {
+    gap: 2px !important;
+    background: #F1F5F9 !important;
+    border-radius: 8px !important;
+    padding: .2rem !important;
+    border: 1px solid #E2E8F0 !important;
+}
+[data-testid="stRadio"] [data-baseweb="radio"] > div:first-child {
+    display: none !important;
+}
+[data-testid="stRadio"] [data-baseweb="radio"] {
+    background: transparent !important;
+    border-radius: 6px !important;
+    padding: .25rem .7rem !important;
+    cursor: pointer !important;
+    transition: background .15s !important;
+}
+[data-testid="stRadio"] [data-baseweb="radio"]:has(input:checked) {
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15,23,42,.1) !important;
+}
+[data-testid="stRadio"] label p { font-size: .8rem !important; font-weight: 600 !important; color: #64748B !important; }
+[data-testid="stRadio"] [data-baseweb="radio"]:has(input:checked) label p { color: #0F172A !important; }
+
+/* ── Form inside expander — remove double border ── */
+[data-testid="stExpander"] [data-testid="stForm"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: .5rem 0 !important;
+}
+
+/* ── Alerts — couleurs douces, typées ── */
+[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    font-size: .84rem !important;
+    border-left-width: 4px !important;
+    padding: .65rem 1rem !important;
+    margin-bottom: .5rem !important;
+}
+[data-testid="stAlert"] p { font-size: .84rem !important; color: inherit !important; }
+/* Info */
+[data-testid="stAlert"][data-baseweb="notification"][kind="info"],
+div.stAlert > div[data-baseweb="notification"] {
+    background: #EFF6FF !important;
+    border-color: #93C5FD !important;
+}
+/* Warning */
+div.stAlert > div[kind="warning"] {
+    background: #FFFBEB !important;
+    border-color: #FDE68A !important;
+}
+/* Error */
+div.stAlert > div[kind="error"] {
+    background: #FEF2F2 !important;
+    border-color: #FECACA !important;
+}
+/* Success */
+div.stAlert > div[kind="success"] {
+    background: #ECFDF5 !important;
+    border-color: #A7F3D0 !important;
+}
 </style>
 """,
         unsafe_allow_html=True,
@@ -577,7 +708,7 @@ def hero_banner(
     taux_str = fmt_taux(dernier_taux)
     return (
         f'<div class="hero">'
-        f'  <div class="hero-chip">🌱 Legend Farm</div>'
+        f'  <div class="hero-chip">🌱 {PROJECT_NAME}</div>'
         f'  <div style="font-size:.72rem;font-weight:800;text-transform:uppercase;'
         f'letter-spacing:.12em;color:rgba(255,255,255,.72);margin:.65rem 0 .15rem 0">'
         f'Capital total valorisé</div>'
@@ -681,3 +812,104 @@ def divider() -> str:
 
 def spacer(h: str = "0.75rem") -> str:
     return f'<div style="height:{h}"></div>'
+
+
+def summary_bar(items: list[tuple[str, str, str]]) -> str:
+    """Barre de résumé financier. items = [(label, value, color_key), ...]"""
+    cells = ""
+    for i, (label, value, color) in enumerate(items):
+        accent, bg, _ = _ACCENT.get(color, _ACCENT["slate"])
+        sep = '<div style="width:1px;background:#E2E8F0;align-self:stretch;flex-shrink:0"></div>' if i > 0 else ""
+        cells += (
+            f'{sep}'
+            f'<div style="flex:1;padding:.85rem 1.25rem">'
+            f'  <div style="font-size:.62rem;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:.1em;color:#94A3B8;margin-bottom:.3rem">{label}</div>'
+            f'  <div style="font-size:.95rem;font-weight:800;color:{accent};letter-spacing:-.01em">{value}</div>'
+            f'</div>'
+        )
+    return (
+        f'<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;'
+        f'box-shadow:0 1px 3px rgba(15,23,42,.04);display:flex;overflow:hidden">'
+        f'{cells}'
+        f'</div>'
+    )
+
+
+def preview_card(
+    title: str,
+    rows: list[tuple[str, str, str]],
+    color: str = "blue",
+    footer: str = "",
+) -> str:
+    """Carte de prévisualisation structurée. rows = [(label, value, color_key), ...]"""
+    accent, bg, border = _ACCENT.get(color, _ACCENT["blue"])
+    rows_html = ""
+    for label, value, val_color in rows:
+        vc = _ACCENT.get(val_color, _ACCENT["slate"])[0] if val_color else "#0F172A"
+        rows_html += (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:.4rem 0;border-bottom:1px solid {bg}">'
+            f'<span style="font-size:.78rem;color:#64748B;font-weight:500">{label}</span>'
+            f'<span style="font-size:.84rem;font-weight:700;color:{vc}">{value}</span>'
+            f'</div>'
+        )
+    footer_html = (
+        f'<div style="margin-top:.5rem;font-size:.72rem;color:{accent};font-weight:600">{footer}</div>'
+        if footer else ""
+    )
+    return (
+        f'<div style="background:{bg};border:1.5px solid {border};border-radius:12px;'
+        f'padding:.85rem 1.1rem;margin-top:.5rem">'
+        f'<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;'
+        f'color:{accent};margin-bottom:.5rem">{title}</div>'
+        f'{rows_html}'
+        f'{footer_html}'
+        f'</div>'
+    )
+
+
+def cat_card(
+    icon: str,
+    name: str,
+    description: str,
+    montant: str,
+    nb: int,
+    pct: float,
+    color: str = "blue",
+    status: str = "",
+    status_color: str = "green",
+) -> str:
+    """Carte catégorie dépenses."""
+    accent, bg, border = _ACCENT.get(color, _ACCENT["blue"])
+    sc, sbg, _ = _ACCENT.get(status_color, _ACCENT["green"])
+    status_html = (
+        f'<span style="font-size:.62rem;font-weight:700;background:{sbg};color:{sc};'
+        f'padding:.15rem .45rem;border-radius:999px">{status}</span>'
+        if status else ""
+    )
+    pct_c = max(0.0, min(100.0, pct))
+    return (
+        f'<div class="card" style="padding:.9rem 1.1rem;margin-bottom:.5rem">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">'
+        f'  <div style="display:flex;align-items:center;gap:.55rem">'
+        f'    <div style="font-size:1.4rem;line-height:1">{icon}</div>'
+        f'    <div>'
+        f'      <div style="font-size:.87rem;font-weight:700;color:#0F172A;line-height:1.2">{name}</div>'
+        f'      <div style="font-size:.68rem;color:#94A3B8;margin-top:.1rem;max-width:200px;line-height:1.3">{description[:55]}</div>'
+        f'    </div>'
+        f'  </div>'
+        f'  <div style="text-align:right;flex-shrink:0;margin-left:.75rem">'
+        f'    <div style="font-size:.9rem;font-weight:800;color:#0F172A">{montant}</div>'
+        f'    <div style="font-size:.65rem;color:#94A3B8">{nb} dépense{"s" if nb != 1 else ""}</div>'
+        f'  </div>'
+        f'</div>'
+        f'<div style="background:#F1F5F9;border-radius:999px;height:5px;overflow:hidden;margin-bottom:.35rem">'
+        f'  <div style="background:{accent};width:{pct_c:.1f}%;height:100%;border-radius:999px"></div>'
+        f'</div>'
+        f'<div style="display:flex;justify-content:space-between;align-items:center">'
+        f'  <span style="font-size:.65rem;color:#94A3B8">{pct_c:.1f}% du total</span>'
+        f'  {status_html}'
+        f'</div>'
+        f'</div>'
+    )

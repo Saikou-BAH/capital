@@ -14,7 +14,6 @@ from utils.formatting import (
 from utils.charts import chart_evolution_capital
 from utils.runtime import is_read_only_mode
 
-st.set_page_config(page_title="Historique", page_icon="📜", layout="wide")
 inject_css()
 
 st.markdown(page_header("Historique", "📜", "Vue chronologique complète — filtres avancés et export."), unsafe_allow_html=True)
