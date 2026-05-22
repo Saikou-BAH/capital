@@ -47,7 +47,7 @@ if not df_mvt.empty:
     total_frais = df_mvt[df_mvt["type_mouvement"] == "frais_retrait"]["montant_converti_gnf"].sum()
     nb_frais = len(df_mvt[df_mvt["type_mouvement"] == "frais_retrait"])
 else:
-    nb_total = nb_apports = nb_transferts = nb_frais = 0
+    nb_total = nb_apports = nb_transferts = nb_depenses = nb_frais = 0
     total_apports = total_depenses = total_frais = 0.0
 
 c1, c2, c3, c4, c5 = st.columns(5)
