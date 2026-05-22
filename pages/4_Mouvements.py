@@ -33,7 +33,6 @@ noms_inv = df_inv.set_index("id")["nom"].to_dict() if not df_inv.empty else {}
 noms_cpt = df_cpt.set_index("id")["nom"].to_dict() if not df_cpt.empty else {}
 compte_devises = df_cpt.set_index("id")["devise"].astype(str).str.upper().to_dict() if not df_cpt.empty else {}
 compte_frais = df_cpt.set_index("id")["frais_pct"].apply(lambda x: float(x) if x not in ("", None) else 0.0).to_dict() if not df_cpt.empty else {}
-compte_inv_map = df_cpt.set_index("id")["investisseur_id"].to_dict() if not df_cpt.empty else {}
 dernier_taux = get_dernier_taux(df_taux)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
@@ -103,20 +102,19 @@ st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
 cpt_opts = {cid: nm for cid, nm in noms_cpt.items()}
 
-# ── Ligne 1 : date + investisseur (sauf transfert — déduit du compte source) ─
+# ── Ligne 1 : date + investisseur ──────────────────────────────────────────
 r1c1, r1c2 = st.columns([2, 3])
 with r1c1:
     date_mvt = st.date_input("Date *", value=date.today(), format="DD/MM/YYYY", key="mvt_date", disabled=READ_ONLY)
     st.caption(f"Date enregistrée : {date_mvt.isoformat()}")
 with r1c2:
-    if type_mvt != "transfert":
-        inv_id = st.selectbox(
-            "Investisseur *",
-            options=list(noms_inv.keys()) if noms_inv else [""],
-            format_func=lambda x: noms_inv.get(x, x),
-            key="mvt_inv",
-            disabled=READ_ONLY,
-        )
+    inv_id = st.selectbox(
+        "Investisseur *",
+        options=list(noms_inv.keys()) if noms_inv else [""],
+        format_func=lambda x: noms_inv.get(x, x),
+        key="mvt_inv",
+        disabled=READ_ONLY,
+    )
 
 st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
@@ -159,18 +157,6 @@ elif type_mvt == "transfert":
             key="mvt_dst_transfert",
             disabled=READ_ONLY,
         )
-    inv_id_auto = compte_inv_map.get(src_id, "")
-    nom_inv_auto = noms_inv.get(inv_id_auto, "—")
-    if src_id and inv_id_auto:
-        st.markdown(
-            f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
-            f'padding:.5rem .75rem;font-size:.85rem;color:#1D4ED8;margin-top:.3rem">'
-            f'👤 Investisseur déduit du compte source : <strong>{nom_inv_auto}</strong></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("Sélectionnez un compte source pour déduire l'investisseur automatiquement.")
-    inv_id = inv_id_auto
 
 else:  # ajustement
     cs1, cs2 = st.columns(2)
