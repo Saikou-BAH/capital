@@ -301,7 +301,9 @@ if not df_cpt.empty:
                     with c5:
                         st.markdown(f'<div class="row-comment">{fmt_taux(row["taux_eur_gnf"]) if str(row.get("devise_origine","")).upper()=="EUR" else "—"}</div>', unsafe_allow_html=True)
                     with c6:
-                        st.markdown(f'<div class="row-comment">{row.get("compte_source_id","—")}</div>', unsafe_allow_html=True)
+                        src_nom = cpt_map.get(row.get("compte_source_id", ""), row.get("compte_source_id", "—") or "—")
+                        st.markdown(f'<div class="row-comment">{src_nom}</div>', unsafe_allow_html=True)
                     with c7:
-                        st.markdown(f'<div class="row-comment">{row.get("compte_destination_id","—")}</div>', unsafe_allow_html=True)
+                        dst_nom = cpt_map.get(row.get("compte_destination_id", ""), row.get("compte_destination_id", "—") or "—")
+                        st.markdown(f'<div class="row-comment">{dst_nom}</div>', unsafe_allow_html=True)
                     st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.2rem 0">', unsafe_allow_html=True)

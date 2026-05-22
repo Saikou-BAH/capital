@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 
 from utils.config import STATUTS_INVESTISSEUR, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_DECEMBRE_MONTANT
-from utils.data_loader import get_investisseurs, add_investisseur, update_investisseur, get_mouvements
+from utils.data_loader import get_investisseurs, add_investisseur, update_investisseur, get_mouvements, get_comptes
 from utils.calculs import (
     parts_par_investisseur, apports_par_devise_investisseur,
     evolution_apports_par_investisseur,
@@ -29,9 +29,10 @@ st.markdown(page_header("Investisseurs", "👥", "Gérez les membres du projet e
 
 @st.cache_data(ttl=60)
 def load():
-    return get_investisseurs(), get_mouvements()
+    return get_investisseurs(), get_mouvements(), get_comptes()
 
-df_inv, df_mvt = load()
+df_inv, df_mvt, df_cpt = load()
+noms_cpt = df_cpt.set_index("id")["nom"].to_dict() if not df_cpt.empty else {}
 df_parts = parts_par_investisseur(df_mvt, df_inv)
 df_apports_devise = apports_par_devise_investisseur(df_mvt, df_inv)
 df_evo_apports = evolution_apports_par_investisseur(df_mvt, df_inv)
@@ -273,7 +274,9 @@ if not df_inv.empty:
                     with c5:
                         st.markdown(f'<div class="row-comment">{fmt_taux(row["taux_eur_gnf"]) if str(row.get("devise_origine","")).upper()=="EUR" else "—"}</div>', unsafe_allow_html=True)
                     with c6:
-                        st.markdown(f'<div class="row-comment">{row.get("compte_source_id", "—")}</div>', unsafe_allow_html=True)
+                        src_nom = noms_cpt.get(row.get("compte_source_id", ""), row.get("compte_source_id", "—") or "—")
+                        st.markdown(f'<div class="row-comment">{src_nom}</div>', unsafe_allow_html=True)
                     with c7:
-                        st.markdown(f'<div class="row-comment">{row.get("compte_destination_id", "—")}</div>', unsafe_allow_html=True)
+                        dst_nom = noms_cpt.get(row.get("compte_destination_id", ""), row.get("compte_destination_id", "—") or "—")
+                        st.markdown(f'<div class="row-comment">{dst_nom}</div>', unsafe_allow_html=True)
                     st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.2rem 0">', unsafe_allow_html=True)
