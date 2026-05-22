@@ -183,15 +183,7 @@ else:
                 unsafe_allow_html=True,
             )
         with c7:
-            type_mvt_v   = str(row.get("type_mouvement","")).lower()
-            devise_orig_v = str(row.get("devise_origine","")).upper()
-            pays_dst_v   = str(row.get("pays_dst",""))
-            devise_dst_v = str(row.get("devise_dst","")).upper()
-            can_delete = (
-                type_mvt_v == "apport" and devise_orig_v == "EUR"
-            ) or (
-                type_mvt_v == "transfert" and pays_dst_v.lower() == "guinée" and devise_dst_v == "GNF"
-            )
+            can_delete = True
             if can_delete and not READ_ONLY:
                 if st.button("🗑️", key=f"del_{row['id']}", help="Supprimer"):
                     if delete_mouvement(row["id"]):

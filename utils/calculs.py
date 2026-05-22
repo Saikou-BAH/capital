@@ -7,7 +7,7 @@ from utils.config import TAUX_EUR_GNF_DEFAUT, CAPITAL_CIBLE_GNF
 
 # ── Conversion de devises ─────────────────────────────────────────────────────
 
-EXPENSE_TYPES = {"depense", "retrait"}
+EXPENSE_TYPES = {"depense", "retrait", "frais_retrait"}
 
 def convertir_en_gnf(montant: float, devise: str, taux: float) -> float:
     """Convertit un montant dans n'importe quelle devise en GNF."""
@@ -709,7 +709,7 @@ def soldes_par_compte(df_mvt: pd.DataFrame, df_comptes: pd.DataFrame) -> pd.Data
                 lambda row: float(row["montant_converti_gnf"]) if str(row["devise_origine"]).upper() == "EUR" else float(row["montant_origine"]),
                 axis=1,
             ).sum()
-            debits = df[(df["compte_source_id"] == cid) & df["type_mouvement"].isin(["retrait", "depense", "transfert"])].apply(
+            debits = df[(df["compte_source_id"] == cid) & df["type_mouvement"].isin(["retrait", "depense", "transfert", "frais_retrait"])].apply(
                 lambda row: float(row["montant_origine"]) if str(row["devise_origine"]).upper() == "GNF" else float(row["montant_converti_gnf"]),
                 axis=1,
             ).sum()

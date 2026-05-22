@@ -157,6 +157,7 @@ elif type_mvt == "transfert":
     if mode_transfert == MODE_APPORT:
         if df_apports_dispo.empty:
             st.warning("Aucun apport EUR avec solde disponible. Enregistrez d'abord un apport.", icon=None)
+            sel_apport_id = ""
             src_id = ""
             dst_id = ""
             inv_id = list(noms_inv.keys())[0] if noms_inv else ""
@@ -271,7 +272,7 @@ if type_mvt == "transfert" and _frais_dst > 0 and dst_id:
 st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
 # ── Ligne 3 : montant + devise + taux + résultat ───────────────────────────
-_transfert_apport_mode = (type_mvt == "transfert" and "sel_apport_id" in dir() and sel_apport_id)
+_transfert_apport_mode = (type_mvt == "transfert" and bool(sel_apport_id))
 _eur_max = apport_detail.get("eur_restant", 0.0) if _transfert_apport_mode else 0.0
 
 cm1, cm2, cm3, cm4 = st.columns([2, 1.5, 2, 2])
