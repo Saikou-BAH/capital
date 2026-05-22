@@ -184,8 +184,8 @@ def add_mouvement(
     compte_destination_id: str = "",
     commentaire: str = "",
     compte_dans_capital: bool = True,
+    apport_source_id: str = "",
 ) -> bool:
-    # Pour les mouvements en GNF, le taux est 1 (pas de conversion)
     taux_final = taux_eur_gnf if devise_origine == "EUR" else 1
     row = {
         "id": _new_id("mvt-"),
@@ -200,6 +200,7 @@ def add_mouvement(
         "montant_converti_gnf": montant_converti_gnf,
         "commentaire": commentaire,
         "compte_dans_capital": str(compte_dans_capital),
+        "apport_source_id": apport_source_id,
         "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
     return _append_csv(SHEET_MOUVEMENTS, COLS_MOUVEMENTS, row)

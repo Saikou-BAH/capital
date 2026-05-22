@@ -210,7 +210,8 @@ def get_mouvements() -> pd.DataFrame:
 def add_mouvement(date_mvt, type_mouvement, investisseur_id, montant_origine,
                   devise_origine, taux_eur_gnf, montant_converti_gnf,
                   compte_source_id="", compte_destination_id="",
-                  commentaire="", compte_dans_capital=True) -> bool:
+                  commentaire="", compte_dans_capital=True,
+                  apport_source_id="") -> bool:
     taux_final = taux_eur_gnf if devise_origine == "EUR" else 1
     return _add_row(SHEET_MOUVEMENTS, COLS_MOUVEMENTS, {
         "id": _new_id("mvt-"), "date": str(date_mvt),
@@ -219,6 +220,7 @@ def add_mouvement(date_mvt, type_mouvement, investisseur_id, montant_origine,
         "montant_origine": montant_origine, "devise_origine": devise_origine,
         "taux_eur_gnf": taux_final, "montant_converti_gnf": montant_converti_gnf,
         "commentaire": commentaire, "compte_dans_capital": str(compte_dans_capital),
+        "apport_source_id": apport_source_id,
         "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
 

@@ -45,7 +45,7 @@ COLS_MOUVEMENTS = [
     "compte_source_id", "compte_destination_id",
     "montant_origine", "devise_origine", "taux_eur_gnf",
     "montant_converti_gnf", "commentaire",
-    "compte_dans_capital", "date_creation",
+    "compte_dans_capital", "apport_source_id", "date_creation",
 ]
 
 COLS_OBJECTIFS = [

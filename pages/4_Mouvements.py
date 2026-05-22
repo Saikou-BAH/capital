@@ -8,7 +8,7 @@ from utils.config import TYPES_MOUVEMENT, DEVISES, TAUX_EUR_GNF_DEFAUT
 from utils.data_loader import (
     get_mouvements, get_investisseurs, get_comptes, get_taux, add_mouvement,
 )
-from utils.calculs import convertir_en_gnf, get_dernier_taux
+from utils.calculs import convertir_en_gnf, get_dernier_taux, get_apports_disponibles, calcul_valeur_apport
 from utils.formatting import (
     inject_css, kpi_card, section_header, fmt_gnf, fmt_eur, fmt_taux,
     badge_mouvement, divider, spacer,
@@ -120,6 +120,7 @@ st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
 # ── Ligne 2 : comptes (selon type) ─────────────────────────────────────────
 if type_mvt == "apport":
+    sel_apport_id = ""
     dst_id = st.selectbox(
         "Compte destination *",
         options=[""] + list(cpt_opts.keys()),
@@ -130,6 +131,7 @@ if type_mvt == "apport":
     src_id = ""
 
 elif type_mvt in ("depense", "retrait"):
+    sel_apport_id = ""
     src_id = st.selectbox(
         "Compte source *",
         options=[""] + list(cpt_opts.keys()),
@@ -140,25 +142,102 @@ elif type_mvt in ("depense", "retrait"):
     dst_id = ""
 
 elif type_mvt == "transfert":
-    cs1, cs2 = st.columns(2)
-    with cs1:
-        src_id = st.selectbox(
-            "Compte source *",
-            options=[""] + list(cpt_opts.keys()),
-            format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
-            key="mvt_src_transfert",
-            disabled=READ_ONLY,
-        )
-    with cs2:
-        dst_id = st.selectbox(
-            "Compte destination *",
-            options=[""] + list(cpt_opts.keys()),
-            format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
-            key="mvt_dst_transfert",
+    # ── Mode transfert : EUR depuis un apport OU interne GNF ─────────────────
+    df_apports_dispo = get_apports_disponibles(df_mvt)
+    MODE_APPORT = "💶 EUR depuis un apport"
+    MODE_INTERNE = "🔄 Interne GNF (sans apport)"
+    mode_transfert = st.radio(
+        "Type de transfert",
+        [MODE_APPORT, MODE_INTERNE],
+        horizontal=True,
+        key="mvt_mode_transfert",
+        disabled=READ_ONLY,
+    )
+
+    if mode_transfert == MODE_APPORT:
+        if df_apports_dispo.empty:
+            st.warning("Aucun apport EUR avec solde disponible. Enregistrez d'abord un apport.", icon=None)
+            src_id = ""
+            dst_id = ""
+            inv_id = list(noms_inv.keys())[0] if noms_inv else ""
+        else:
+            # Formatage de chaque apport pour la liste déroulante
+            def _fmt_apport(aid):
+                row = df_apports_dispo[df_apports_dispo["id"] == aid]
+                if row.empty:
+                    return aid
+                r = row.iloc[0]
+                inv_nm = noms_inv.get(str(r["investisseur_id"]), str(r["investisseur_id"]))
+                eur_r = float(r.get("eur_restant", r["montant_origine"]))
+                taux_e = float(r["taux_eur_gnf"]) if float(r["taux_eur_gnf"]) > 0 else 0
+                gnf_e = eur_r * taux_e
+                return f"{inv_nm} — {eur_r:,.2f} € restants ≈ {gnf_e:,.0f} GNF (estimé)"
+
+            apport_ids = list(df_apports_dispo["id"])
+            sel_apport_id = st.selectbox(
+                "Apport source *",
+                options=apport_ids,
+                format_func=_fmt_apport,
+                key="mvt_apport_source",
+                disabled=READ_ONLY,
+            )
+
+            apport_detail = calcul_valeur_apport(sel_apport_id, df_mvt)
+            inv_id = apport_detail.get("investisseur_id", "")
+            src_id = apport_detail.get("compte_destination_id", "")
+            eur_max = apport_detail.get("eur_restant", 0.0)
+
+            # Infos investisseur + compte source (lecture seule)
+            nom_inv_apport = noms_inv.get(inv_id, inv_id)
+            nom_src_apport = noms_cpt.get(src_id, src_id)
+            st.markdown(
+                f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
+                f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2rem">'
+                f'<span>👤 <strong>{nom_inv_apport}</strong></span>'
+                f'<span>🏦 Depuis : <strong>{nom_src_apport}</strong></span>'
+                f'<span>💶 Solde : <strong>{eur_max:,.2f} €</strong></span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
+
+            dst_id = st.selectbox(
+                "Compte destination *",
+                options=[""] + list(cpt_opts.keys()),
+                format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
+                key="mvt_dst_transfert_apport",
+                disabled=READ_ONLY,
+            )
+    else:
+        # Transfert interne GNF
+        sel_apport_id = ""
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            src_id = st.selectbox(
+                "Compte source *",
+                options=[""] + list(cpt_opts.keys()),
+                format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
+                key="mvt_src_transfert_interne",
+                disabled=READ_ONLY,
+            )
+        with cs2:
+            dst_id = st.selectbox(
+                "Compte destination *",
+                options=[""] + list(cpt_opts.keys()),
+                format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
+                key="mvt_dst_transfert_interne",
+                disabled=READ_ONLY,
+            )
+        inv_id = st.selectbox(
+            "Investisseur *",
+            options=list(noms_inv.keys()) if noms_inv else [""],
+            format_func=lambda x: noms_inv.get(x, x),
+            key="mvt_inv_interne",
             disabled=READ_ONLY,
         )
 
-else:  # ajustement
+else:  # ajustement / frais_retrait
+    sel_apport_id = ""
     cs1, cs2 = st.columns(2)
     with cs1:
         src_id = st.selectbox(
@@ -192,16 +271,29 @@ if type_mvt == "transfert" and _frais_dst > 0 and dst_id:
 st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 
 # ── Ligne 3 : montant + devise + taux + résultat ───────────────────────────
+_transfert_apport_mode = (type_mvt == "transfert" and "sel_apport_id" in dir() and sel_apport_id)
+_eur_max = apport_detail.get("eur_restant", 0.0) if _transfert_apport_mode else 0.0
+
 cm1, cm2, cm3, cm4 = st.columns([2, 1.5, 2, 2])
 with cm1:
-    montant = st.number_input("Montant *", min_value=0.0, step=1000.0, format="%.2f", key="mvt_montant", disabled=READ_ONLY)
+    _step = 0.01 if (type_mvt in ("apport", "transfert")) else 1000.0
+    _default_montant = float(_eur_max) if _transfert_apport_mode else 0.0
+    montant = st.number_input(
+        "Montant *", min_value=0.0, step=_step, format="%.2f",
+        value=_default_montant,
+        key="mvt_montant", disabled=READ_ONLY,
+    )
 with cm2:
     if type_mvt == "apport":
         devise = "EUR"
         st.markdown("<div style='font-weight:600;margin-bottom:.35rem'>Devise</div>", unsafe_allow_html=True)
         st.markdown("<div style='font-size:1rem;color:#1F2937'>EUR</div>", unsafe_allow_html=True)
+    elif type_mvt == "transfert" and _transfert_apport_mode:
+        devise = "EUR"
+        st.markdown("<div style='font-weight:600;margin-bottom:.35rem'>Devise</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1rem;color:#1F2937'>EUR</div>", unsafe_allow_html=True)
     elif type_mvt == "transfert":
-        devise = st.selectbox("Devise *", DEVISES, index=DEVISES.index("EUR"), key="mvt_devise_transfert", disabled=READ_ONLY)
+        devise = st.selectbox("Devise *", DEVISES, index=DEVISES.index("GNF"), key="mvt_devise_transfert", disabled=READ_ONLY)
     else:
         devise = st.selectbox("Devise *", DEVISES, key="mvt_devise", disabled=READ_ONLY)
 with cm3:
@@ -260,6 +352,8 @@ if submitted:
             if src_dev == "EUR" and dst_dev == "GNF":
                 if devise != "EUR":
                     errors.append("Le transfert EUR→GNF doit être saisi en EUR.")
+                if _transfert_apport_mode and montant > _eur_max + 0.01:
+                    errors.append(f"Le montant ({montant:,.2f} €) dépasse le solde disponible sur cet apport ({_eur_max:,.2f} €).")
             elif src_dev == dst_dev:
                 if src_dev == "GNF" and devise != "GNF":
                     errors.append("Le transfert interne GNF doit être saisi en GNF.")
@@ -274,6 +368,7 @@ if submitted:
         for e in errors:
             st.error(e)
     else:
+        _apport_src = sel_apport_id if (type_mvt == "transfert" and _transfert_apport_mode) else ""
         ok = add_mouvement(
             date_mvt=date_mvt.isoformat(), type_mouvement=type_mvt,
             investisseur_id=inv_id, montant_origine=montant,
@@ -282,9 +377,9 @@ if submitted:
             compte_source_id=src_id, compte_destination_id=dst_id,
             commentaire=commentaire.strip(),
             compte_dans_capital=compte_dans_capital,
+            apport_source_id=_apport_src,
         )
         if ok:
-            # Création automatique du mouvement de frais si le compte destination en a
             frais_pct_dst = compte_frais.get(dst_id, 0.0) if dst_id else 0.0
             if type_mvt == "transfert" and frais_pct_dst > 0 and dst_id:
                 frais_gnf = round(montant_gnf * frais_pct_dst)
@@ -301,6 +396,7 @@ if submitted:
                     compte_destination_id="",
                     commentaire=f"Frais de retrait {frais_pct_dst*100:.0f}% — {nom_dst}",
                     compte_dans_capital=True,
+                    apport_source_id=_apport_src,
                 )
                 st.success(
                     f"✅ **Transfert** enregistré — **{fmt_gnf(montant_gnf)}** le {date_mvt}  \n"

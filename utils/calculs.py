@@ -455,6 +455,159 @@ def evolution_apports_par_investisseur(df_mvt: pd.DataFrame, df_inv: pd.DataFram
     return daily[columns].sort_values(["nom", "date"])
 
 
+# ── Suivi par apport ─────────────────────────────────────────────────────────
+
+def get_apports_disponibles(df_mvt: pd.DataFrame) -> pd.DataFrame:
+    """Retourne les apports EUR ayant encore un solde à transférer."""
+    if df_mvt is None or df_mvt.empty:
+        return pd.DataFrame()
+
+    df = df_mvt.copy()
+    df["montant_origine"] = pd.to_numeric(df["montant_origine"], errors="coerce").fillna(0)
+    df["apport_source_id"] = df["apport_source_id"].astype(str).str.strip() if "apport_source_id" in df.columns else ""
+
+    apports = df[
+        (df["type_mouvement"] == "apport") &
+        (df["devise_origine"].astype(str).str.upper() == "EUR")
+    ].copy()
+
+    if apports.empty:
+        return pd.DataFrame()
+
+    transferts = df[
+        (df["type_mouvement"] == "transfert") &
+        (df["apport_source_id"] != "")
+    ]
+    if not transferts.empty:
+        eur_transfere = transferts.groupby("apport_source_id")["montant_origine"].sum().rename("eur_transfere")
+        apports = apports.join(eur_transfere, on="id", how="left")
+    else:
+        apports["eur_transfere"] = 0.0
+
+    apports["eur_transfere"] = pd.to_numeric(apports["eur_transfere"], errors="coerce").fillna(0.0)
+    apports["eur_restant"] = apports["montant_origine"] - apports["eur_transfere"]
+    return apports[apports["eur_restant"] > 0.01].copy()
+
+
+def calcul_valeur_apport(apport_id: str, df_mvt: pd.DataFrame) -> dict:
+    """Valorisation détaillée d'un apport : cristallisé + estimé + frais."""
+    if df_mvt is None or df_mvt.empty:
+        return {}
+
+    df = df_mvt.copy()
+    df["montant_origine"] = pd.to_numeric(df["montant_origine"], errors="coerce").fillna(0)
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df["taux_eur_gnf"] = pd.to_numeric(df["taux_eur_gnf"], errors="coerce").fillna(0)
+    df["apport_source_id"] = df["apport_source_id"].astype(str).str.strip() if "apport_source_id" in df.columns else ""
+
+    apport_rows = df[df["id"] == apport_id]
+    if apport_rows.empty:
+        return {}
+    apport = apport_rows.iloc[0]
+    eur_initial = float(apport["montant_origine"])
+    taux_estimatif = float(apport["taux_eur_gnf"])
+
+    linked_transfers = df[(df["apport_source_id"] == apport_id) & (df["type_mouvement"] == "transfert")]
+    eur_transfere = float(linked_transfers["montant_origine"].sum())
+    gnf_cristallise = float(linked_transfers["montant_converti_gnf"].sum())
+
+    linked_frais = df[(df["apport_source_id"] == apport_id) & (df["type_mouvement"] == "frais_retrait")]
+    frais_gnf = float(linked_frais["montant_converti_gnf"].sum())
+
+    eur_restant = max(0.0, eur_initial - eur_transfere)
+    gnf_estime_restant = eur_restant * taux_estimatif
+    valeur_totale_gnf = gnf_cristallise + gnf_estime_restant
+
+    return {
+        "apport_id": apport_id,
+        "investisseur_id": str(apport["investisseur_id"]),
+        "date": str(apport.get("date", "")),
+        "compte_destination_id": str(apport.get("compte_destination_id", "")),
+        "eur_initial": eur_initial,
+        "taux_estimatif": taux_estimatif,
+        "eur_transfere": eur_transfere,
+        "eur_restant": eur_restant,
+        "gnf_cristallise": gnf_cristallise,
+        "gnf_estime_restant": gnf_estime_restant,
+        "valeur_totale_gnf": valeur_totale_gnf,
+        "frais_gnf": frais_gnf,
+        "valeur_nette_gnf": valeur_totale_gnf - frais_gnf,
+        "pct_transfere": (eur_transfere / eur_initial * 100) if eur_initial > 0 else 0.0,
+        "commentaire": str(apport.get("commentaire", "")),
+    }
+
+
+def detail_par_investisseur(df_mvt: pd.DataFrame, df_inv: pd.DataFrame) -> pd.DataFrame:
+    """
+    Valorisation agrégée par investisseur basée sur les apports et leurs transferts liés.
+    Utilise le taux réel pour les portions transférées, l'estimatif pour le reste.
+    """
+    if df_mvt is None or df_mvt.empty:
+        return pd.DataFrame()
+
+    df = df_mvt.copy()
+    df["montant_origine"] = pd.to_numeric(df["montant_origine"], errors="coerce").fillna(0)
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df["taux_eur_gnf"] = pd.to_numeric(df["taux_eur_gnf"], errors="coerce").fillna(0)
+
+    apports = df[
+        (df["type_mouvement"] == "apport") &
+        (df["devise_origine"].astype(str).str.upper() == "EUR")
+    ]
+    if apports.empty:
+        return pd.DataFrame()
+
+    rows = [calcul_valeur_apport(str(a["id"]), df) for _, a in apports.iterrows()]
+    rows = [r for r in rows if r]
+    if not rows:
+        return pd.DataFrame()
+
+    df_vals = pd.DataFrame(rows)
+    result = (
+        df_vals.groupby("investisseur_id")
+        .agg(
+            eur_initial=("eur_initial", "sum"),
+            eur_transfere=("eur_transfere", "sum"),
+            eur_restant=("eur_restant", "sum"),
+            gnf_cristallise=("gnf_cristallise", "sum"),
+            gnf_estime_restant=("gnf_estime_restant", "sum"),
+            valeur_totale_gnf=("valeur_totale_gnf", "sum"),
+            frais_gnf=("frais_gnf", "sum"),
+            valeur_nette_gnf=("valeur_nette_gnf", "sum"),
+        )
+        .reset_index()
+    )
+
+    # Gain/perte taux = GNF cristallisé - (EUR transféré × taux estimatif moyen)
+    # On calcule le gain par apport pour être précis
+    gains = []
+    for _, a in apports.iterrows():
+        v = calcul_valeur_apport(str(a["id"]), df)
+        if v and v["eur_transfere"] > 0:
+            gains.append({
+                "investisseur_id": v["investisseur_id"],
+                "gain": v["gnf_cristallise"] - (v["eur_transfere"] * v["taux_estimatif"]),
+            })
+    if gains:
+        df_gains = pd.DataFrame(gains).groupby("investisseur_id")["gain"].sum().reset_index().rename(columns={"gain": "gain_taux_gnf"})
+        result = result.merge(df_gains, on="investisseur_id", how="left")
+    else:
+        result["gain_taux_gnf"] = 0.0
+    result["gain_taux_gnf"] = result["gain_taux_gnf"].fillna(0.0)
+
+    total = result["valeur_totale_gnf"].sum()
+    result["part_pct"] = (result["valeur_totale_gnf"] / total * 100).round(2) if total > 0 else 0.0
+
+    if df_inv is not None and not df_inv.empty:
+        noms = df_inv[["id", "nom"]].rename(columns={"id": "investisseur_id"})
+        result = result.merge(noms, on="investisseur_id", how="left")
+        result["nom"] = result["nom"].fillna(result["investisseur_id"])
+    else:
+        result["nom"] = result["investisseur_id"]
+
+    return result.sort_values("valeur_totale_gnf", ascending=False)
+
+
 # ── Répartition par pays ──────────────────────────────────────────────────────
 
 def repartition_par_pays(df_mvt: pd.DataFrame, df_comptes: pd.DataFrame) -> pd.DataFrame:

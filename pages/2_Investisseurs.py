@@ -10,7 +10,7 @@ from utils.config import STATUTS_INVESTISSEUR, OBJECTIF_SEPTEMBRE_MONTANT, OBJEC
 from utils.data_loader import get_investisseurs, add_investisseur, update_investisseur, get_mouvements, get_comptes
 from utils.calculs import (
     parts_par_investisseur, apports_par_devise_investisseur,
-    evolution_apports_par_investisseur,
+    evolution_apports_par_investisseur, detail_par_investisseur, calcul_valeur_apport,
 )
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state, fmt_gnf, fmt_pct,
@@ -34,6 +34,7 @@ def load():
 df_inv, df_mvt, df_cpt = load()
 noms_cpt = df_cpt.set_index("id")["nom"].to_dict() if not df_cpt.empty else {}
 df_parts = parts_par_investisseur(df_mvt, df_inv)
+df_detail_inv = detail_par_investisseur(df_mvt, df_inv)
 df_apports_devise = apports_par_devise_investisseur(df_mvt, df_inv)
 df_evo_apports = evolution_apports_par_investisseur(df_mvt, df_inv)
 READ_ONLY = is_read_only_mode()
@@ -237,6 +238,82 @@ if not df_inv.empty:
                         st.success("✅ Mis à jour.")
                         st.cache_data.clear()
                         st.rerun()
+
+    with st.expander("📊 Suivi détaillé des apports (valorisation réelle)", expanded=False):
+        if df_detail_inv.empty:
+            st.info("Aucun apport EUR enregistré.")
+        else:
+            for _, inv_row in df_inv.iterrows():
+                inv_id_sel = str(inv_row["id"])
+                inv_nom_sel = str(inv_row["nom"])
+                apports_inv = df_mvt[
+                    (df_mvt["type_mouvement"] == "apport") &
+                    (df_mvt["investisseur_id"] == inv_id_sel) &
+                    (df_mvt["devise_origine"].astype(str).str.upper() == "EUR")
+                ]
+                if apports_inv.empty:
+                    continue
+
+                st.markdown(f"**{inv_nom_sel}**")
+
+                # Ligne de totaux investisseur
+                row_inv = df_detail_inv[df_detail_inv["investisseur_id"] == inv_id_sel]
+                if not row_inv.empty:
+                    r = row_inv.iloc[0]
+                    gain_clr = "#059669" if r["gain_taux_gnf"] >= 0 else "#DC2626"
+                    gain_sign = "+" if r["gain_taux_gnf"] >= 0 else ""
+                    st.markdown(
+                        f'<div style="display:flex;gap:1.5rem;flex-wrap:wrap;background:#F8FAFC;'
+                        f'border:1px solid #E2E8F0;border-radius:8px;padding:.55rem .85rem;margin-bottom:.5rem;font-size:.82rem">'
+                        f'<span>💶 Engagé : <strong>{r["eur_initial"]:,.2f} €</strong></span>'
+                        f'<span>✅ Transféré : <strong>{r["eur_transfere"]:,.2f} €</strong></span>'
+                        f'<span>⏳ Restant : <strong>{r["eur_restant"]:,.2f} €</strong></span>'
+                        f'<span>💰 Valeur GNF : <strong>{fmt_gnf(r["valeur_totale_gnf"])}</strong></span>'
+                        f'<span style="color:{gain_clr}">📈 Gain taux : <strong>{gain_sign}{fmt_gnf(r["gain_taux_gnf"])}</strong></span>'
+                        f'<span style="color:#DC2626">🏧 Frais : <strong>-{fmt_gnf(r["frais_gnf"])}</strong></span>'
+                        f'<span>🏆 Net : <strong>{fmt_gnf(r["valeur_nette_gnf"])}</strong></span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Détail par apport
+                h1, h2, h3, h4, h5, h6, h7 = st.columns([1.2, 1.5, 1.5, 2.2, 2.2, 1.8, 2.5])
+                for col, lbl in zip([h1,h2,h3,h4,h5,h6,h7], ["Date","EUR initial","EUR restant","GNF cristallisé","GNF estimé restant","Frais","Note"]):
+                    with col:
+                        st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
+                st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.25rem 0">', unsafe_allow_html=True)
+
+                for _, a_row in apports_inv.iterrows():
+                    v = calcul_valeur_apport(str(a_row["id"]), df_mvt)
+                    if not v:
+                        continue
+                    pct = v["pct_transfere"]
+                    pct_clr = "#059669" if pct >= 100 else ("#2563EB" if pct > 0 else "#94A3B8")
+                    c1,c2,c3,c4,c5,c6,c7 = st.columns([1.2,1.5,1.5,2.2,2.2,1.8,2.5])
+                    with c1:
+                        st.markdown(f'<div class="row-date">{v["date"][:10]}</div>', unsafe_allow_html=True)
+                    with c2:
+                        st.markdown(f'<div style="font-size:.82rem;color:#0F172A;font-weight:600">{fmt_eur(v["eur_initial"])}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="font-size:.68rem;color:#94A3B8">taux est. {v["taux_estimatif"]:,.0f}</div>', unsafe_allow_html=True)
+                    with c3:
+                        clr_r = "#DC2626" if v["eur_restant"] > 0 else "#059669"
+                        lbl_r = f'{v["eur_restant"]:,.2f} €' if v["eur_restant"] > 0 else "Complet ✅"
+                        st.markdown(f'<div style="font-size:.82rem;color:{clr_r};font-weight:600">{lbl_r}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div style="font-size:.68rem;color:{pct_clr}">{pct:.0f}% transféré</div>', unsafe_allow_html=True)
+                    with c4:
+                        st.markdown(f'<div class="row-amount">{fmt_gnf(v["gnf_cristallise"])}</div>', unsafe_allow_html=True)
+                    with c5:
+                        clr_e = "#94A3B8" if v["eur_restant"] <= 0 else "#D97706"
+                        st.markdown(f'<div style="font-size:.85rem;font-weight:700;color:{clr_e}">{fmt_gnf(v["gnf_estime_restant"])}</div>', unsafe_allow_html=True)
+                    with c6:
+                        frais_txt = f'-{fmt_gnf(v["frais_gnf"])}' if v["frais_gnf"] > 0 else "—"
+                        frais_clr = "#DC2626" if v["frais_gnf"] > 0 else "#94A3B8"
+                        st.markdown(f'<div style="font-size:.82rem;color:{frais_clr};font-weight:600">{frais_txt}</div>', unsafe_allow_html=True)
+                    with c7:
+                        st.markdown(f'<div class="row-comment">{v["commentaire"][:50]}</div>', unsafe_allow_html=True)
+                    st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.2rem 0">', unsafe_allow_html=True)
+
+                st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
 
     with st.expander("📋 Historique des mouvements de l'investisseur", expanded=False):
         inv_choice = st.selectbox(
