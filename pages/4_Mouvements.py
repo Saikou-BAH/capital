@@ -259,58 +259,28 @@ elif type_mvt == "transfert":
         # Option : lier à un transfert EUR→GNF entrant pour traçabilité apport
         df_transferts_src = get_transferts_gnf_sur_compte(src_id, df_mvt) if src_id else pd.DataFrame()
         if not df_transferts_src.empty:
-            def _fmt_transfert_gnf(tid):
-                if not tid:
-                    return "— Sans liaison —"
-                row = df_transferts_src[df_transferts_src["id"] == tid]
-                if row.empty:
-                    return str(tid)
-                r = row.iloc[0]
-                inv_nm = noms_inv.get(str(r["investisseur_id"]), str(r["investisseur_id"]))
-                gnf = float(r["montant_converti_gnf"])
-                dt = str(r.get("date", ""))[:10]
-                return f"{inv_nm} — {gnf:,.0f} GNF reçus le {dt}"
-
-            sel_transfert_gnf_id = st.selectbox(
-                "Lier à un transfert entrant (optionnel)",
-                options=[""] + list(df_transferts_src["id"]),
-                format_func=_fmt_transfert_gnf,
-                key="mvt_lier_transfert_gnf",
-                disabled=READ_ONLY,
-            )
-
-            if sel_transfert_gnf_id:
-                row_t = df_transferts_src[df_transferts_src["id"] == sel_transfert_gnf_id].iloc[0]
-                gnf_transfer_link_id = str(row_t["apport_source_id"])
-                inv_id = str(row_t["investisseur_id"])
-                nom_inv_t = noms_inv.get(inv_id, inv_id)
-                gnf_recu = float(row_t["montant_converti_gnf"])
-                dt_t = str(row_t.get("date", ""))[:10]
-
-                # Calcul du solde GNF déjà re-transféré depuis ce compte pour ce même apport
-                _deja_gnf = pd.to_numeric(
+            # Calcul du disponible pour chaque transfert AVANT d'afficher la liste
+            def _dispo_pour_transfert(row_t):
+                apport_id = str(row_t["apport_source_id"])
+                gnf_recu  = float(row_t["montant_converti_gnf"])
+                deja = pd.to_numeric(
                     df_mvt[
                         (df_mvt["type_mouvement"] == "transfert") &
                         (df_mvt["compte_source_id"].astype(str) == str(src_id)) &
-                        (df_mvt["apport_source_id"].astype(str) == gnf_transfer_link_id) &
+                        (df_mvt["apport_source_id"].astype(str) == apport_id) &
                         (df_mvt["devise_origine"].astype(str).str.upper() == "GNF")
                     ]["montant_origine"],
                     errors="coerce",
                 ).sum()
-                gnf_disponible_src = max(0.0, gnf_recu - _deja_gnf)
+                return max(0.0, gnf_recu - deja)
 
-                st.markdown(
-                    f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
-                    f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
-                    f'<span>👤 <strong>{nom_inv_t}</strong></span>'
-                    f'<span>📅 Reçu le <strong>{dt_t}</strong></span>'
-                    f'<span>💰 Total reçu : <strong>{gnf_recu:,.0f} GNF</strong></span>'
-                    f'<span>✅ Disponible : <strong style="color:#065F46">{gnf_disponible_src:,.0f} GNF</strong></span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
-            else:
+            # Ne garder que les transferts avec encore du GNF disponible
+            _dispos = {row_t["id"]: _dispo_pour_transfert(row_t) for _, row_t in df_transferts_src.iterrows()}
+            df_transferts_dispo = df_transferts_src[df_transferts_src["id"].map(_dispos) > 0]
+
+            if df_transferts_dispo.empty:
+                st.info("Aucun transfert entrant avec du GNF disponible sur ce compte.", icon=None)
+                sel_transfert_gnf_id = ""
                 gnf_transfer_link_id = ""
                 inv_id = st.selectbox(
                     "Investisseur *",
@@ -319,6 +289,56 @@ elif type_mvt == "transfert":
                     key="mvt_inv_interne",
                     disabled=READ_ONLY,
                 )
+            else:
+                def _fmt_transfert_gnf(tid):
+                    if not tid:
+                        return "— Sans liaison —"
+                    row = df_transferts_dispo[df_transferts_dispo["id"] == tid]
+                    if row.empty:
+                        return str(tid)
+                    r = row.iloc[0]
+                    inv_nm = noms_inv.get(str(r["investisseur_id"]), str(r["investisseur_id"]))
+                    dispo  = _dispos.get(tid, 0.0)
+                    dt = str(r.get("date", ""))[:10]
+                    return f"{inv_nm} — {dispo:,.0f} GNF disponibles (reçu le {dt})"
+
+                sel_transfert_gnf_id = st.selectbox(
+                    "Lier à un transfert entrant (optionnel)",
+                    options=[""] + list(df_transferts_dispo["id"]),
+                    format_func=_fmt_transfert_gnf,
+                    key="mvt_lier_transfert_gnf",
+                    disabled=READ_ONLY,
+                )
+
+                if sel_transfert_gnf_id:
+                    row_t = df_transferts_dispo[df_transferts_dispo["id"] == sel_transfert_gnf_id].iloc[0]
+                    gnf_transfer_link_id = str(row_t["apport_source_id"])
+                    inv_id = str(row_t["investisseur_id"])
+                    nom_inv_t = noms_inv.get(inv_id, inv_id)
+                    gnf_recu = float(row_t["montant_converti_gnf"])
+                    dt_t = str(row_t.get("date", ""))[:10]
+                    gnf_disponible_src = _dispos.get(sel_transfert_gnf_id, 0.0)
+
+                    st.markdown(
+                        f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
+                        f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
+                        f'<span>👤 <strong>{nom_inv_t}</strong></span>'
+                        f'<span>📅 Reçu le <strong>{dt_t}</strong></span>'
+                        f'<span>💰 Total reçu : <strong>{gnf_recu:,.0f} GNF</strong></span>'
+                        f'<span>✅ Disponible : <strong style="color:#065F46">{gnf_disponible_src:,.0f} GNF</strong></span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
+                else:
+                    gnf_transfer_link_id = ""
+                    inv_id = st.selectbox(
+                        "Investisseur *",
+                        options=list(noms_inv.keys()) if noms_inv else [""],
+                        format_func=lambda x: noms_inv.get(x, x),
+                        key="mvt_inv_interne",
+                        disabled=READ_ONLY,
+                    )
         else:
             gnf_transfer_link_id = ""
             inv_id = st.selectbox(

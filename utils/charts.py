@@ -2,7 +2,11 @@
 
 import plotly.graph_objects as go
 import pandas as pd
-from utils.config import COULEURS_CHART, COULEUR_PRIMAIRE, CAPITAL_CIBLE_GNF
+from utils.config import (
+    COULEURS_CHART, COULEUR_PRIMAIRE, CAPITAL_CIBLE_GNF,
+    OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE, OBJECTIF_SEPTEMBRE_NOM,
+    OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE, OBJECTIF_DECEMBRE_NOM,
+)
 from utils.formatting import fmt_gnf
 
 _FONT = "Inter, system-ui, sans-serif"
@@ -98,34 +102,73 @@ def chart_evolution_capital(df_evolution: pd.DataFrame) -> go.Figure:
     df = df.dropna(subset=["date"])
     if df.empty:
         return _empty("Aucun mouvement enregistré")
+    df = df.sort_values("date")
     tick_values = df["date"].drop_duplicates().sort_values()
 
     fig = go.Figure()
+
+    # Projection linéaire si ≥ 2 points
+    if len(df) >= 2:
+        import numpy as np
+        x_num = (df["date"] - df["date"].iloc[0]).dt.days.values
+        y_vals = df["capital_cumule"].values
+        coef = np.polyfit(x_num, y_vals, 1)  # pente en GNF/jour
+        pente = coef[0]
+        if pente > 0:
+            # date d'atteinte objectif final
+            jours_restants = (OBJECTIF_DECEMBRE_MONTANT - y_vals[-1]) / pente
+            date_proj = df["date"].iloc[-1] + pd.Timedelta(days=max(0, jours_restants))
+            x_proj = pd.date_range(start=df["date"].iloc[-1], end=date_proj, periods=20)
+            y_proj = y_vals[-1] + pente * (x_proj - df["date"].iloc[-1]).days.values
+            fig.add_trace(go.Scatter(
+                x=x_proj, y=y_proj,
+                mode="lines",
+                name="Projection",
+                line=dict(color="#2563EB", width=1.5, dash="dot"),
+                opacity=0.4,
+                hovertemplate="<b>Projection</b><br>%{x|%b %Y}<br>%{y:,.0f} GNF<extra></extra>",
+            ))
+
+    # Courbe capital réel
     fig.add_trace(go.Scatter(
         x=df["date"],
         y=df["capital_cumule"],
         mode="lines+markers",
-        name="Capital",
+        name="Capital réel",
         line=dict(color="#2563EB", width=2.5, shape="spline", smoothing=0.6),
         marker=dict(size=6, color="#2563EB", line=dict(color="#FFFFFF", width=1.5)),
         fill="tozeroy",
         fillcolor="rgba(37,99,235,0.08)",
         hovertemplate="<b>%{x|%d %b %Y}</b><br>Capital : %{y:,.0f} GNF<extra></extra>",
     ))
+
+    # Ligne objectif Septembre
     fig.add_hline(
-        y=CAPITAL_CIBLE_GNF,
-        line=dict(color="#F43F5E", dash="dot", width=1.5),
-        annotation_text="Objectif 500M",
-        annotation_position="top right",
-        annotation_font=dict(color="#F43F5E", size=10),
+        y=OBJECTIF_SEPTEMBRE_MONTANT,
+        line=dict(color="#D97706", dash="dash", width=1.2),
+        annotation_text="Sept. 250M",
+        annotation_position="top left",
+        annotation_font=dict(color="#D97706", size=10),
     )
+    # Ligne objectif Décembre
+    fig.add_hline(
+        y=OBJECTIF_DECEMBRE_MONTANT,
+        line=dict(color="#DC2626", dash="dot", width=1.5),
+        annotation_text="Déc. 500M",
+        annotation_position="top right",
+        annotation_font=dict(color="#DC2626", size=10),
+    )
+
     fig.update_layout(
-        **_BASE,
-        title=dict(text="Évolution du capital", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
+        **_layout_base_without("legend"),
+        title=dict(text="Évolution du capital & objectifs", font=dict(size=13, color="#475569", weight=700), x=0, xref="paper"),
         xaxis=_date_axis(tick_values),
         yaxis=dict(**_AXIS_Y, title=None, tickformat=","),
-        height=320,
-        showlegend=False,
+        height=340,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=10), bgcolor="rgba(0,0,0,0)",
+        ),
     )
     return fig
 
@@ -493,15 +536,79 @@ def chart_mouvements_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
         marker=dict(color="#F43F5E", opacity=0.85),
         hovertemplate="<b>%{x|%b %Y}</b><br>Sorties : %{y:,.0f} GNF<extra></extra>",
     ))
+    n_months = len(tick_values)
     fig.update_layout(
-        **_BASE,
+        **_layout_base_without("legend"),
         barmode="group",
-        title=dict(text="Apports & sorties / mois", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=_date_axis(tick_values, "%b %Y"),
+        title=dict(text="Apports & sorties / mois", font=dict(size=13, color="#475569", weight=700), x=0, xref="paper"),
+        xaxis=dict(
+            **_date_axis(tick_values, "%b %Y"),
+            rangeslider=dict(visible=n_months > 6, thickness=0.06),
+        ),
         yaxis=dict(**_AXIS_Y, title=None),
-        height=260,
-        bargap=0.25,
+        height=320,
+        bargap=0.3,
         bargroupgap=0.08,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=11),
+        ),
+    )
+    return fig
+
+
+def chart_frais_par_investisseur(df_mvt: pd.DataFrame, df_inv: pd.DataFrame) -> go.Figure:
+    if df_mvt is None or df_mvt.empty:
+        return _empty("Aucun frais enregistré")
+
+    df = df_mvt[df_mvt["type_mouvement"] == "frais_retrait"].copy()
+    if df.empty:
+        return _empty("Aucun frais de retrait enregistré")
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df = df.dropna(subset=["date"])
+    df["mois"] = df["date"].dt.to_period("M").dt.to_timestamp()
+
+    if df_inv is not None and not df_inv.empty:
+        noms = df_inv[["id", "nom"]].rename(columns={"id": "investisseur_id"})
+        df = df.merge(noms, on="investisseur_id", how="left")
+        df["nom"] = df["nom"].fillna(df["investisseur_id"])
+    else:
+        df["nom"] = df["investisseur_id"]
+
+    investisseurs = sorted(df["nom"].dropna().unique())
+    colors = COULEURS_CHART
+
+    fig = go.Figure()
+    for i, nom in enumerate(investisseurs):
+        grp = df[df["nom"] == nom].groupby("mois")["montant_converti_gnf"].sum()
+        total = grp.sum()
+        fig.add_trace(go.Bar(
+            x=grp.index,
+            y=grp.values,
+            name=f"{nom} · {fmt_gnf(total)}",
+            marker=dict(color=colors[i % len(colors)], opacity=0.85),
+            hovertemplate=f"<b>{nom}</b><br>%{{x|%b %Y}}<br>Frais : %{{y:,.0f}} GNF<extra></extra>",
+        ))
+
+    all_mois = df["mois"].drop_duplicates().sort_values()
+    fig.update_layout(
+        **_layout_base_without("legend"),
+        barmode="stack",
+        title=dict(text="Frais de retrait par investisseur", font=dict(size=13, color="#475569", weight=700), x=0, xref="paper"),
+        xaxis=_date_axis(all_mois, "%b %Y"),
+        yaxis=dict(**_AXIS_Y, title=None),
+        height=300,
+        bargap=0.35,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=11), bgcolor="rgba(0,0,0,0)",
+        ),
     )
     return fig
 

@@ -16,7 +16,8 @@ from utils.data_loader import (
 from utils.calculs import (
     calculer_capital_total, calculer_capital_breakdown, parts_par_investisseur,
     repartition_par_pays, repartition_par_devise,
-    evolution_capital, progression_objectifs, get_dernier_taux,
+    evolution_capital, evolution_apports_par_investisseur,
+    progression_objectifs, get_dernier_taux,
 )
 from utils.formatting import (
     inject_css, kpi_card, hero_banner, section_header, page_header,
@@ -26,6 +27,8 @@ from utils.formatting import (
 )
 from utils.charts import (
     chart_evolution_capital, chart_parts_investisseurs,
+    chart_evolution_apports_investisseurs,
+    chart_frais_par_investisseur,
     chart_repartition_pays, chart_repartition_devise,
     chart_mouvements_par_mois,
 )
@@ -51,6 +54,7 @@ df_parts          = parts_par_investisseur(df_mvt, df_inv)
 df_pays           = repartition_par_pays(df_mvt, df_cpt)
 df_devise         = repartition_par_devise(df_mvt, df_cpt)
 df_evolution      = evolution_capital(df_mvt, df_cpt)
+df_evolution_inv  = evolution_apports_par_investisseur(df_mvt, df_inv)
 capital_breakdown = calculer_capital_breakdown(df_mvt, df_cpt)
 total_eur         = capital_breakdown["total_eur"]
 total_gnf         = capital_breakdown["total_gnf"]
@@ -244,15 +248,27 @@ with col_pts:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GRAPHIQUES LIGNE 2 : Mouvements / Pays / Devise
+# GRAPHIQUE : Évolution des parts par investisseur
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
+if df_evolution_inv is not None and not df_evolution_inv.empty:
+    st.plotly_chart(chart_evolution_apports_investisseurs(df_evolution_inv), use_container_width=True)
+else:
+    st.markdown(empty_state("📈", "Aucune donnée", "Enregistrez des apports pour voir l'évolution par investisseur."), unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GRAPHIQUES LIGNE 2 : Mouvements pleine largeur
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown(spacer("0.75rem"), unsafe_allow_html=True)
-c_mvt, c_pays, c_dev = st.columns(3)
+st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
+st.plotly_chart(chart_mouvements_par_mois(df_mvt), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
-with c_mvt:
-    st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
-    st.plotly_chart(chart_mouvements_par_mois(df_mvt), use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+# Camemberts Pays / Devise côte à côte
+st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+c_pays, c_dev = st.columns(2)
 
 with c_pays:
     st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
@@ -263,6 +279,14 @@ with c_dev:
     st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
     st.plotly_chart(chart_repartition_devise(df_devise), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FRAIS DE RETRAIT PAR INVESTISSEUR
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
+st.plotly_chart(chart_frais_par_investisseur(df_mvt, df_inv), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PARTS PAR INVESTISSEUR
