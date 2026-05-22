@@ -76,7 +76,7 @@ st.markdown(section_header("Suivi des objectifs", "📊", "#2563EB"), unsafe_all
 if df_prog is not None and not df_prog.empty:
     actifs = df_prog[df_prog["actif"].astype(str).str.lower() == "true"]
     if not actifs.empty:
-        for _, row in actifs.iterrows():
+        for i_obj, (_, row) in enumerate(actifs.iterrows()):
             pct     = float(row["progress_pct"])
             cible   = float(row["montant_cible_gnf"])
             reste   = float(row["reste_gnf"])
@@ -136,7 +136,7 @@ if df_prog is not None and not df_prog.empty:
             with col_gauge:
                 st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
                 st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)
-                st.plotly_chart(chart_objectifs_gauge(row["nom_objectif"], pct, color), use_container_width=True)
+                st.plotly_chart(chart_objectifs_gauge(row["nom_objectif"], pct, color), use_container_width=True, key=f"gauge_{i_obj}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown(spacer("0.25rem"), unsafe_allow_html=True)

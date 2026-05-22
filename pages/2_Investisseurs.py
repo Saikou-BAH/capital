@@ -178,10 +178,14 @@ with col_evo:
             unsafe_allow_html=True,
         )
     else:
-        for _, inv_row in df_inv.iterrows():
-            nom_inv = str(inv_row["nom"])
+        for i_inv, inv_row in enumerate(df_inv.itertuples()):
+            nom_inv = str(inv_row.nom)
             st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem;margin-bottom:.75rem">', unsafe_allow_html=True)
-            st.plotly_chart(chart_evolution_apports_investisseur(df_evo_apports, nom_inv), use_container_width=True)
+            st.plotly_chart(
+                chart_evolution_apports_investisseur(df_evo_apports, nom_inv),
+                use_container_width=True,
+                key=f"evo_apports_{i_inv}",
+            )
             st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
