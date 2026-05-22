@@ -183,25 +183,29 @@ if df_obj is not None and not df_obj.empty:
         choix   = st.selectbox("Objectif", list(obj_map.keys()),
                                format_func=lambda x: obj_map.get(x, x))
         if choix:
-            sel = df_obj[df_obj["id"] == choix].iloc[0]
-            with st.form("form_edit_obj"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    n_nom = st.text_input("Nom", value=str(sel["nom_objectif"]))
-                    n_cib = st.number_input("Montant cible (GNF)", value=float(sel["montant_cible_gnf"]),
-                                            step=1_000_000.0, format="%.0f")
-                with col2:
-                    try:    dc_val = pd.Timestamp(sel["date_cible"]).date()
-                    except: dc_val = date.today()
-                    n_date = st.date_input("Date cible", value=dc_val)
-                    n_act  = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
-                n_desc = st.text_area("Description", value=str(sel.get("description", "")), height=80)
+            _rows_obj = df_obj[df_obj["id"] == choix]
+            if _rows_obj.empty:
+                st.warning("Objectif introuvable — rechargez la page.")
+            else:
+                sel = _rows_obj.iloc[0]
+                with st.form("form_edit_obj"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        n_nom = st.text_input("Nom", value=str(sel["nom_objectif"]))
+                        n_cib = st.number_input("Montant cible (GNF)", value=float(sel["montant_cible_gnf"]),
+                                                step=1_000_000.0, format="%.0f")
+                    with col2:
+                        try:    dc_val = pd.Timestamp(sel["date_cible"]).date()
+                        except: dc_val = date.today()
+                        n_date = st.date_input("Date cible", value=dc_val)
+                        n_act  = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
+                    n_desc = st.text_area("Description", value=str(sel.get("description", "")), height=80)
 
-                if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
-                    if update_objectif(choix, {
-                        "nom_objectif": n_nom, "montant_cible_gnf": n_cib,
-                        "date_cible": str(n_date), "actif": str(n_act), "description": n_desc,
-                    }):
-                        st.success("✅ Mis à jour.")
-                        st.cache_data.clear()
-                        st.rerun()
+                    if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
+                        if update_objectif(choix, {
+                            "nom_objectif": n_nom, "montant_cible_gnf": n_cib,
+                            "date_cible": str(n_date), "actif": str(n_act), "description": n_desc,
+                        }):
+                            st.success("✅ Mis à jour.")
+                            st.cache_data.clear()
+                            st.rerun()

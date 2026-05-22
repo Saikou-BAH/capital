@@ -341,7 +341,7 @@ def parts_par_investisseur(
         .rename("apports_gnf")
     )
     retraits = (
-        df[df["type_mouvement"] == "retrait"]
+        df[df["type_mouvement"].isin(EXPENSE_TYPES)]
         .groupby("investisseur_id")["montant_converti_gnf"]
         .sum()
         .rename("retraits_gnf")

@@ -479,8 +479,8 @@ def chart_mouvements_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
     df["mois"] = df["date"].dt.to_period("M").dt.to_timestamp()
 
     apports  = df[df["type_mouvement"] == "apport"].groupby("mois")["montant_converti_gnf"].sum()
-    retraits = df[df["type_mouvement"].isin(["depense", "retrait"])].groupby("mois")["montant_converti_gnf"].sum()
-    tick_values = pd.Index(apports.index).union(pd.Index(retraits.index)).sort_values()
+    sorties  = df[df["type_mouvement"].isin(["depense", "retrait", "frais_retrait"])].groupby("mois")["montant_converti_gnf"].sum()
+    tick_values = pd.Index(apports.index).union(pd.Index(sorties.index)).sort_values()
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -489,14 +489,14 @@ def chart_mouvements_par_mois(df_mvt: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{x|%b %Y}</b><br>Apports : %{y:,.0f} GNF<extra></extra>",
     ))
     fig.add_trace(go.Bar(
-        x=retraits.index, y=retraits.values, name="Dépenses",
+        x=sorties.index, y=sorties.values, name="Dépenses & Frais",
         marker=dict(color="#F43F5E", opacity=0.85),
-        hovertemplate="<b>%{x|%b %Y}</b><br>Dépenses : %{y:,.0f} GNF<extra></extra>",
+        hovertemplate="<b>%{x|%b %Y}</b><br>Sorties : %{y:,.0f} GNF<extra></extra>",
     ))
     fig.update_layout(
         **_BASE,
         barmode="group",
-        title=dict(text="Apports & dépenses / mois", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
+        title=dict(text="Apports & sorties / mois", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
         xaxis=_date_axis(tick_values, "%b %Y"),
         yaxis=dict(**_AXIS_Y, title=None),
         height=260,

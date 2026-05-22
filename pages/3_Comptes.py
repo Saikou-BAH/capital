@@ -224,43 +224,47 @@ if not df_cpt.empty:
         choix   = st.selectbox("Compte", list(cpt_map.keys()),
                                format_func=lambda x: cpt_map.get(x, x), key="sel_cpt_edit")
         if choix:
-            sel = df_cpt[df_cpt["id"] == choix].iloc[0]
-            with st.form("form_edit_cpt"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    n_nom  = st.text_input("Nom", value=str(sel["nom"]))
-                    n_pays = st.selectbox("Pays", PAYS_DISPONIBLES,
-                                          index=PAYS_DISPONIBLES.index(sel["pays"]) if sel["pays"] in PAYS_DISPONIBLES else 0)
-                    n_dev  = st.selectbox("Devise", DEVISES,
-                                          index=DEVISES.index(sel["devise"]) if sel["devise"] in DEVISES else 0)
-                with col2:
-                    n_type = st.selectbox("Type", TYPES_COMPTE,
-                                          index=TYPES_COMPTE.index(sel["type_compte"]) if sel["type_compte"] in TYPES_COMPTE else 0)
-                    n_inv  = st.selectbox(
-                        "Propriétaire",
-                        options=[""] + list(inv_options.keys()),
-                        format_func=lambda x: inv_options.get(x, "— Aucun —") if x else "— Aucun —",
-                        index=([""] + list(inv_options.keys())).index(sel.get("investisseur_id", ""))
-                        if sel.get("investisseur_id", "") in inv_options else 0,
+            _rows_cpt = df_cpt[df_cpt["id"] == choix]
+            if _rows_cpt.empty:
+                st.warning("Compte introuvable — rechargez la page.")
+            else:
+                sel = _rows_cpt.iloc[0]
+                with st.form("form_edit_cpt"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        n_nom  = st.text_input("Nom", value=str(sel["nom"]))
+                        n_pays = st.selectbox("Pays", PAYS_DISPONIBLES,
+                                              index=PAYS_DISPONIBLES.index(sel["pays"]) if sel["pays"] in PAYS_DISPONIBLES else 0)
+                        n_dev  = st.selectbox("Devise", DEVISES,
+                                              index=DEVISES.index(sel["devise"]) if sel["devise"] in DEVISES else 0)
+                    with col2:
+                        n_type = st.selectbox("Type", TYPES_COMPTE,
+                                              index=TYPES_COMPTE.index(sel["type_compte"]) if sel["type_compte"] in TYPES_COMPTE else 0)
+                        n_inv  = st.selectbox(
+                            "Propriétaire",
+                            options=[""] + list(inv_options.keys()),
+                            format_func=lambda x: inv_options.get(x, "— Aucun —") if x else "— Aucun —",
+                            index=([""] + list(inv_options.keys())).index(sel.get("investisseur_id", ""))
+                            if sel.get("investisseur_id", "") in inv_options else 0,
+                        )
+                        n_actif = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
+                        n_desc  = st.text_area("Description", value=str(sel.get("description", "")), height=80)
+                    n_frais_pct = st.number_input(
+                        "Frais de retrait (%)",
+                        min_value=0.0, max_value=100.0,
+                        value=float(sel.get("frais_pct", 0) or 0) * 100,
+                        step=0.1, format="%.2f",
+                        help="Ex : 1 = 1%. Un mouvement de frais est créé automatiquement à chaque transfert entrant.",
                     )
-                    n_actif = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
-                    n_desc  = st.text_area("Description", value=str(sel.get("description", "")), height=80)
-                n_frais_pct = st.number_input(
-                    "Frais de retrait (%)",
-                    min_value=0.0, max_value=100.0,
-                    value=float(sel.get("frais_pct", 0) or 0) * 100,
-                    step=0.1, format="%.2f",
-                    help="Ex : 1 = 1%. Un mouvement de frais est créé automatiquement à chaque transfert entrant.",
-                )
 
-                if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
-                    if update_compte(choix, {"nom": n_nom, "pays": n_pays, "devise": n_dev,
-                                             "type_compte": n_type, "investisseur_id": n_inv,
-                                             "actif": str(n_actif), "description": n_desc,
-                                             "frais_pct": str(n_frais_pct / 100)}):
-                        st.success("✅ Compte mis à jour.")
-                        st.cache_data.clear()
-                        st.rerun()
+                    if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
+                        if update_compte(choix, {"nom": n_nom, "pays": n_pays, "devise": n_dev,
+                                                 "type_compte": n_type, "investisseur_id": n_inv,
+                                                 "actif": str(n_actif), "description": n_desc,
+                                                 "frais_pct": str(n_frais_pct / 100)}):
+                            st.success("✅ Compte mis à jour.")
+                            st.cache_data.clear()
+                            st.rerun()
 
     with st.expander("📋 Historique du compte", expanded=False):
         cpt_choice = st.selectbox(

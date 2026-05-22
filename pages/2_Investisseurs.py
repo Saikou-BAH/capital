@@ -215,29 +215,33 @@ if not df_inv.empty:
         cid = st.selectbox("Investisseur", list(noms_map.keys()),
                            format_func=lambda x: noms_map.get(x, x), key="sel_inv")
         if cid:
-            sel = df_inv[df_inv["id"] == cid].iloc[0]
-            with st.form("form_edit_inv"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    n_nom = st.text_input("Nom", value=str(sel["nom"]))
-                    n_st  = st.selectbox(
-                        "Statut", STATUTS_INVESTISSEUR,
-                        index=STATUTS_INVESTISSEUR.index(sel["statut"])
-                        if sel["statut"] in STATUTS_INVESTISSEUR else 0,
-                    )
-                with col2:
-                    n_notes = st.text_area("Notes", value=str(sel.get("notes", "")), height=80)
-                    try:
-                        n_date_val = pd.Timestamp(sel.get("date_creation", "")).date()
-                    except Exception:
-                        n_date_val = date.today()
-                    n_date_creation = st.date_input("Date de création", value=n_date_val)
+            _rows_inv = df_inv[df_inv["id"] == cid]
+            if _rows_inv.empty:
+                st.warning("Investisseur introuvable — rechargez la page.")
+            else:
+                sel = _rows_inv.iloc[0]
+                with st.form("form_edit_inv"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        n_nom = st.text_input("Nom", value=str(sel["nom"]))
+                        n_st  = st.selectbox(
+                            "Statut", STATUTS_INVESTISSEUR,
+                            index=STATUTS_INVESTISSEUR.index(sel["statut"])
+                            if sel["statut"] in STATUTS_INVESTISSEUR else 0,
+                        )
+                    with col2:
+                        n_notes = st.text_area("Notes", value=str(sel.get("notes", "")), height=80)
+                        try:
+                            n_date_val = pd.Timestamp(sel.get("date_creation", "")).date()
+                        except Exception:
+                            n_date_val = date.today()
+                        n_date_creation = st.date_input("Date de création", value=n_date_val)
 
-                if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
-                    if update_investisseur(cid, {"nom": n_nom, "statut": n_st, "notes": n_notes, "date_creation": str(n_date_creation)}):
-                        st.success("✅ Mis à jour.")
-                        st.cache_data.clear()
-                        st.rerun()
+                    if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
+                        if update_investisseur(cid, {"nom": n_nom, "statut": n_st, "notes": n_notes, "date_creation": str(n_date_creation)}):
+                            st.success("✅ Mis à jour.")
+                            st.cache_data.clear()
+                            st.rerun()
 
     with st.expander("📊 Suivi détaillé des apports (valorisation réelle)", expanded=False):
         if df_detail_inv.empty:

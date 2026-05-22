@@ -6,8 +6,8 @@ from datetime import date
 
 from utils.config import (
     CAPITAL_CIBLE_GNF,
-    OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
-    OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
+    OBJECTIF_SEPTEMBRE_ID, OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
+    OBJECTIF_DECEMBRE_ID, OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
 )
 from utils.data_loader import (
     get_investisseurs, get_comptes, get_mouvements,
@@ -75,16 +75,26 @@ capital_breakdown = calculer_capital_breakdown(df_mvt, df_cpt)
 total_eur         = capital_breakdown["total_eur"]
 total_gnf         = capital_breakdown["total_gnf"]
 total_eur_gnf     = capital_breakdown["valorisation_eur_gnf"]
-df_obj_prog       = progression_objectifs(df_obj, capital_total)
 nb_inv            = len(df_inv) if df_inv is not None else 0
 nb_mvt            = len(df_mvt) if df_mvt is not None else 0
 
-reste_sep  = max(0.0, OBJECTIF_SEPTEMBRE_MONTANT - capital_total)
-reste_dec  = max(0.0, OBJECTIF_DECEMBRE_MONTANT  - capital_total)
-pct_sep    = min(100.0, capital_total / OBJECTIF_SEPTEMBRE_MONTANT * 100)
-pct_dec    = min(100.0, capital_total / OBJECTIF_DECEMBRE_MONTANT  * 100)
-atteint_sep = capital_total >= OBJECTIF_SEPTEMBRE_MONTANT
-atteint_dec = capital_total >= OBJECTIF_DECEMBRE_MONTANT
+# Merge objectifs hardcodés + objectifs personnalisés du CSV
+_obj_principaux = pd.DataFrame([
+    {"id": OBJECTIF_SEPTEMBRE_ID, "nom_objectif": OBJECTIF_SEPTEMBRE_NOM,
+     "montant_cible_gnf": OBJECTIF_SEPTEMBRE_MONTANT, "date_cible": OBJECTIF_SEPTEMBRE_DATE,
+     "description": "50% du capital cible — 250 millions GNF", "actif": True},
+    {"id": OBJECTIF_DECEMBRE_ID, "nom_objectif": OBJECTIF_DECEMBRE_NOM,
+     "montant_cible_gnf": OBJECTIF_DECEMBRE_MONTANT, "date_cible": OBJECTIF_DECEMBRE_DATE,
+     "description": "100% du capital cible — 500 millions GNF", "actif": True},
+])
+if df_obj is None or df_obj.empty:
+    _df_obj_all = _obj_principaux
+else:
+    _ids_existants = set(df_obj["id"].astype(str)) if "id" in df_obj.columns else set()
+    _manquants = _obj_principaux[~_obj_principaux["id"].astype(str).isin(_ids_existants)]
+    _df_obj_all = pd.concat([df_obj, _manquants], ignore_index=True)
+
+df_obj_prog = progression_objectifs(_df_obj_all, capital_total)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HERO + OBJECTIF RAPIDE
@@ -155,9 +165,7 @@ with k4:
 # OBJECTIFS SEPTEMBRE & DÉCEMBRE
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown(divider(), unsafe_allow_html=True)
-st.markdown(section_header("Objectifs principaux", "🎯", "#059669"), unsafe_allow_html=True)
-
-col_sep, col_dec = st.columns(2)
+st.markdown(section_header("Objectifs", "🎯", "#059669"), unsafe_allow_html=True)
 
 def _obj_card(nom, desc, pct, capital, cible, reste, echeance, atteint):
     color  = "#059669" if atteint else ("#2563EB" if pct >= 50 else "#D97706")
@@ -191,21 +199,24 @@ def _obj_card(nom, desc, pct, capital, cible, reste, echeance, atteint):
   </div>
 </div>"""
 
-with col_sep:
-    st.markdown(_obj_card(
-        OBJECTIF_SEPTEMBRE_NOM,
-        "50% du capital cible — 250 millions GNF",
-        pct_sep, capital_total, OBJECTIF_SEPTEMBRE_MONTANT, reste_sep,
-        OBJECTIF_SEPTEMBRE_DATE, atteint_sep,
-    ), unsafe_allow_html=True)
-
-with col_dec:
-    st.markdown(_obj_card(
-        OBJECTIF_DECEMBRE_NOM,
-        "100% du capital cible — 500 millions GNF",
-        pct_dec, capital_total, OBJECTIF_DECEMBRE_MONTANT, reste_dec,
-        OBJECTIF_DECEMBRE_DATE, atteint_dec,
-    ), unsafe_allow_html=True)
+if df_obj_prog is not None and not df_obj_prog.empty:
+    _actifs_dash = df_obj_prog[df_obj_prog["actif"].astype(str).str.lower() == "true"]
+    _obj_rows = list(_actifs_dash.iterrows())
+    for i in range(0, max(len(_obj_rows), 1), 2):
+        _pair = _obj_rows[i:i + 2]
+        _cols = st.columns(len(_pair)) if len(_pair) > 1 else st.columns([1, 1])
+        for j, (_, _row) in enumerate(_pair):
+            with _cols[j]:
+                st.markdown(_obj_card(
+                    str(_row["nom_objectif"]),
+                    str(_row.get("description", "")),
+                    float(_row["progress_pct"]),
+                    capital_total,
+                    float(_row["montant_cible_gnf"]),
+                    float(_row["reste_gnf"]),
+                    str(_row.get("date_cible", "")),
+                    bool(_row["atteint"]),
+                ), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # GRAPHIQUES LIGNE 1 : Évolution + Parts

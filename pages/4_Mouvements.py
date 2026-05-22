@@ -43,6 +43,7 @@ if not df_mvt.empty:
     total_apports = df_mvt[df_mvt["type_mouvement"] == "apport"]["montant_converti_gnf"].sum()
     nb_transferts = len(df_mvt[df_mvt["type_mouvement"] == "transfert"])
     total_depenses = df_mvt[df_mvt["type_mouvement"].isin(["depense", "retrait"])]["montant_converti_gnf"].sum()
+    nb_depenses = len(df_mvt[df_mvt["type_mouvement"].isin(["depense", "retrait"])])
     total_frais = df_mvt[df_mvt["type_mouvement"] == "frais_retrait"]["montant_converti_gnf"].sum()
     nb_frais = len(df_mvt[df_mvt["type_mouvement"] == "frais_retrait"])
 else:
@@ -55,7 +56,7 @@ with c1:
 with c2:
     st.markdown(kpi_card("Apports", str(nb_apports), sub=fmt_gnf(total_apports), icon="💰", color="green"), unsafe_allow_html=True)
 with c3:
-    st.markdown(kpi_card("Dépenses & Retraits", fmt_gnf(total_depenses), sub=f"{nb_transferts} transfert(s) hors apports", icon="💸", color="red"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Dépenses & Retraits", fmt_gnf(total_depenses), sub=f"{nb_depenses} opération(s)", icon="💸", color="red"), unsafe_allow_html=True)
 with c4:
     st.markdown(kpi_card("Frais de retrait", fmt_gnf(total_frais), sub=f"{nb_frais} opération(s)", icon="🏧", color="violet"), unsafe_allow_html=True)
 with c5:
