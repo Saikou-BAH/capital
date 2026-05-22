@@ -101,7 +101,9 @@ icn, clr, txt = TYPE_HELP.get(type_mvt, ("ℹ️", "blue", ""))
 st.info(f"{icn} {txt}", icon=None)
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
-cpt_opts = {cid: nm for cid, nm in noms_cpt.items()}
+cpt_opts     = {cid: nm for cid, nm in noms_cpt.items()}
+cpt_opts_eur = {cid: nm for cid, nm in noms_cpt.items() if compte_devises.get(cid, "") == "EUR"}
+cpt_opts_gnf = {cid: nm for cid, nm in noms_cpt.items() if compte_devises.get(cid, "") == "GNF"}
 
 # ── Ligne 1 : date + investisseur ──────────────────────────────────────────
 r1c1, r1c2 = st.columns([2, 3])
@@ -122,10 +124,12 @@ st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 # ── Ligne 2 : comptes (selon type) ─────────────────────────────────────────
 if type_mvt == "apport":
     sel_apport_id = ""
+    if not cpt_opts_eur:
+        st.warning("Aucun compte en EUR disponible. Créez d'abord un compte en EUR dans la page Comptes.", icon=None)
     dst_id = st.selectbox(
-        "Compte destination *",
-        options=[""] + list(cpt_opts.keys()),
-        format_func=lambda x: cpt_opts.get(x, "— Aucun —") if x else "— Aucun —",
+        "Compte destination (EUR uniquement) *",
+        options=[""] + list(cpt_opts_eur.keys()),
+        format_func=lambda x: cpt_opts_eur.get(x, "— Aucun —") if x else "— Aucun —",
         key="mvt_dst_apport",
         disabled=READ_ONLY,
     )
