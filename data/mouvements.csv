@@ -14,7 +14,6 @@ mvt-076e8216;2026-04-07;apport;inv-a96f71b3;;cpt-2a19f2ae;21.43;EUR;10600.0;2271
 mvt-b5853fbe;2026-04-06;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;400.0;EUR;10700.0;4280000;Je fais bouger le 4rd apport vers le compte Orange Money.;False;mvt-1674837a;2026-05-22 18:57
 mvt-923c0565;2026-04-08;transfert;inv-a96f71b3;cpt-2a19f2ae;cpt-0875c45a;21.43;EUR;10600.0;227158;Je fais bouger le 5rd vers le compte Orange Money;False;mvt-076e8216;2026-05-22 19:07
 mvt-02442961;2026-05-01;apport;inv-437fd569;;cpt-2a19f2ae;2450.0;EUR;10500.0;25725000;C'est le 6rd apport vers le compte Orange Money;True;;2026-05-22 20:02
-mvt-1a5b7d0f;2026-05-02;apport;inv-a96f71b3;;cpt-2a19f2ae;1000.0;EUR;10500.0;10500000;C'est le 7rd apport vers le compte orange Money.;True;;2026-05-22 20:03
 mvt-efbdf079;2026-05-03;transfert;inv-437fd569;cpt-0875c45a;cpt-cd5043e5;5243000.0;GNF;1;5243000;C'est le premier apport de 490 euros d'abdoulaye que je vais mettre dans le compte marchand.;False;mvt-eca3bafd;2026-05-22 21:08
 mvt-83ae4e7a;2026-05-03;frais_retrait;inv-437fd569;cpt-cd5043e5;;52430;GNF;1;52430;Frais de retrait 1% — Orange Marchand;True;mvt-eca3bafd;2026-05-22 21:08
 mvt-6ba128a7;2026-05-04;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;8472000.0;GNF;1;8472000;Je fais l'envoie d'une partie de l'apport reçu dans le compte orange money le 02/03/2026;False;mvt-019f3c58;2026-05-22 21:25
