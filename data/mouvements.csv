@@ -18,3 +18,5 @@ mvt-efbdf079;2026-05-03;transfert;inv-437fd569;cpt-0875c45a;cpt-cd5043e5;5243000
 mvt-83ae4e7a;2026-05-03;frais_retrait;inv-437fd569;cpt-cd5043e5;;52430;GNF;1;52430;Frais de retrait 1% — Orange Marchand;True;mvt-eca3bafd;2026-05-22 21:08
 mvt-6ba128a7;2026-05-04;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;8472000.0;GNF;1;8472000;Je fais l'envoie d'une partie de l'apport reçu dans le compte orange money le 02/03/2026;False;mvt-019f3c58;2026-05-22 21:25
 mvt-daec959f;2026-05-04;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;84720;GNF;1;84720;Frais de retrait 1% — Orange Marchand;True;mvt-019f3c58;2026-05-22 21:25
+mvt-789db2fc;2026-05-26;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;1500000.0;GNF;1;1500000;C'est en trasnfert en orange money et orange marchand.;False;mvt-019f3c58;2026-06-03 22:26
+mvt-165c6104;2026-05-26;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;15000;GNF;1;15000;Frais de retrait 1% — Orange Marchand;True;mvt-019f3c58;2026-06-03 22:26
