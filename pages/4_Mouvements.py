@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-from utils.config import TYPES_MOUVEMENT, DEVISES, TAUX_EUR_GNF_DEFAUT, FRAIS_RETRAIT_BAREME, ORANGE_MONEY_MAX_RETRAIT_GNF
+from utils.config import TYPES_MOUVEMENT, TYPES_MOUVEMENT_FILTRE, DEVISES, TAUX_EUR_GNF_DEFAUT, FRAIS_RETRAIT_BAREME, ORANGE_MONEY_MAX_RETRAIT_GNF
 from utils.data_loader import (
     get_mouvements, get_investisseurs, get_comptes, get_taux, add_mouvement,
 )
@@ -197,7 +197,7 @@ elif type_mvt == "transfert":
                 eur_r = float(r.get("eur_restant", r["montant_origine"]))
                 taux_e = float(r["taux_eur_gnf"]) if float(r["taux_eur_gnf"]) > 0 else 0
                 gnf_e = eur_r * taux_e
-                return f"{inv_nm} — {eur_r:,.2f} € restants ≈ {gnf_e:,.0f} GNF (estimé)"
+                return f"{inv_nm} — {fmt_eur(eur_r)} restants ≈ {fmt_gnf(gnf_e)} (estimé)"
 
             apport_ids = list(df_apports_dispo["id"])
             sel_apport_id = st.selectbox(
@@ -221,7 +221,7 @@ elif type_mvt == "transfert":
                 f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2rem">'
                 f'<span>👤 <strong>{nom_inv_apport}</strong></span>'
                 f'<span>🏦 Depuis : <strong>{nom_src_apport}</strong></span>'
-                f'<span>💶 Solde : <strong>{eur_max:,.2f} €</strong></span>'
+                f'<span>💶 Solde : <strong>{fmt_eur(eur_max)}</strong></span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -300,7 +300,7 @@ elif type_mvt == "transfert":
                     inv_nm = noms_inv.get(str(r["investisseur_id"]), str(r["investisseur_id"]))
                     dispo  = _dispos.get(tid, 0.0)
                     dt = str(r.get("date", ""))[:10]
-                    return f"{inv_nm} — {dispo:,.0f} GNF disponibles (reçu le {dt})"
+                    return f"{inv_nm} — {fmt_gnf(dispo)} disponibles (reçu le {dt})"
 
                 sel_transfert_gnf_id = st.selectbox(
                     "Lier à un transfert entrant (optionnel)",
@@ -324,8 +324,8 @@ elif type_mvt == "transfert":
                         f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
                         f'<span>👤 <strong>{nom_inv_t}</strong></span>'
                         f'<span>📅 Reçu le <strong>{dt_t}</strong></span>'
-                        f'<span>💰 Total reçu : <strong>{gnf_recu:,.0f} GNF</strong></span>'
-                        f'<span>✅ Disponible : <strong style="color:#065F46">{gnf_disponible_src:,.0f} GNF</strong></span>'
+                        f'<span>💰 Total reçu : <strong>{fmt_gnf(gnf_recu)}</strong></span>'
+                        f'<span>✅ Disponible : <strong style="color:#065F46">{fmt_gnf(gnf_disponible_src)}</strong></span>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -654,7 +654,7 @@ st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 # Filtres
 f1, f2, f3, f4, f5 = st.columns(5)
 with f1:
-    f_type = st.multiselect("Type", TYPES_MOUVEMENT, key="f_mvt_type")
+    f_type = st.multiselect("Type", TYPES_MOUVEMENT_FILTRE, key="f_mvt_type")
 with f2:
     inv_choices = ["Tous"] + sorted(noms_inv.values())
     f_inv = st.selectbox("Investisseur", inv_choices, key="f_mvt_inv")
@@ -705,7 +705,14 @@ if not df_mvt.empty:
         with c1:
             st.markdown(f'<div class="row-date">{str(row["date"])[:10] if pd.notna(row["date"]) else "—"}</div>', unsafe_allow_html=True)
         with c2:
-            st.markdown(badge_mouvement(str(row["type_mouvement"])), unsafe_allow_html=True)
+            _type_row = str(row["type_mouvement"])
+            _badge_label = None
+            if _type_row == "frais_retrait":
+                _src_nom = row.get("src_nom", "") or ""
+                _commentaire = str(row.get("commentaire", ""))
+                if "Orange Marchand" in _src_nom or "Orange Marchand" in _commentaire:
+                    _badge_label = "Frais Orange Marchand"
+            st.markdown(badge_mouvement(_type_row, label=_badge_label), unsafe_allow_html=True)
         with c3:
             st.markdown(f'<div style="font-size:.85rem;color:#334155;font-weight:500">{row.get("investisseur","—")}</div>', unsafe_allow_html=True)
         with c4:

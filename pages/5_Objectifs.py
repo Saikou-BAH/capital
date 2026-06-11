@@ -9,7 +9,7 @@ from utils.config import (
     OBJECTIF_SEPTEMBRE_ID, OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
     OBJECTIF_DECEMBRE_ID, OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
 )
-from utils.calculs import calculer_capital_total, progression_objectifs
+from utils.calculs import calculer_capital_total, progression_objectifs, calculer_effort_objectif
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state,
     fmt_gnf, fmt_pct, progress_bar, divider, spacer,
@@ -76,25 +76,36 @@ if df_prog is not None and not df_prog.empty:
     actifs = df_prog[df_prog["actif"].astype(str).str.lower() == "true"]
     if not actifs.empty:
         for i_obj, (_, row) in enumerate(actifs.iterrows()):
-            pct     = float(row["progress_pct"])
             cible   = float(row["montant_cible_gnf"])
-            reste   = float(row["reste_gnf"])
-            atteint = bool(row["atteint"])
             date_c  = str(row.get("date_cible", ""))
+            atteint = bool(row["atteint"])
 
-            try:
-                dc    = pd.Timestamp(date_c).date()
-                jours = (dc - date.today()).days
-                jours_txt = (
-                    "✅ Atteint avant l'échéance !" if atteint else
-                    f"⚠️ Dépassé de {-jours} jours" if jours < 0 else
-                    f"{jours} jours restants"
-                )
-            except Exception:
-                jours_txt = date_c
+            effort  = calculer_effort_objectif(capital, cible, date_c)
+            pct     = effort["progress_pct"]
+            reste   = effort["reste_gnf"]
+            jours   = effort["jours_restants"]
+            statut  = effort["statut"]
+            c_stat  = effort["couleur_statut"]
+            e_mens  = effort["effort_mensuel"]
+            e_hebo  = effort["effort_hebdomadaire"]
+
+            if atteint:
+                jours_txt = "✅ Atteint avant l'échéance !"
+            elif jours < 0:
+                jours_txt = f"⚠️ Dépassé de {-jours} jours"
+            else:
+                jours_txt = f"{jours} jours restants"
 
             color   = "#059669" if atteint else ("#2563EB" if pct >= 50 else "#D97706")
             bar_col = "green"  if atteint else ("blue"    if pct >= 50 else "amber")
+
+            _statut_color_map = {
+                "green": ("#166534", "#dcfce7"),
+                "blue":  ("#1e40af", "#dbeafe"),
+                "amber": ("#92400e", "#fef3c7"),
+                "red":   ("#991b1b", "#fee2e2"),
+            }
+            _sc, _sbg = _statut_color_map.get(c_stat, ("#374151", "#F3F4F6"))
 
             col_info, col_gauge = st.columns([3, 1])
             with col_info:
@@ -108,26 +119,37 @@ if df_prog is not None and not df_prog.empty:
                         <div style="text-align:right;flex-shrink:0;margin-left:1rem">
                             <div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>
                             <div style="font-size:.72rem;color:#94A3B8;margin-top:.15rem;font-weight:500">{jours_txt}</div>
+                            <span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;
+                                background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{statut}</span>
                         </div>
                     </div>
                     {progress_bar(pct, bar_col, "10px")}
-                    <div style="display:flex;gap:2.5rem;margin-top:.8rem">
+                    <div style="display:flex;gap:2rem;margin-top:.8rem;flex-wrap:wrap">
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Capital actuel</div>
-                            <div style="font-size:.88rem;font-weight:700;color:#0F172A">{fmt_gnf(capital)}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(capital)}</div>
                         </div>
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Cible</div>
-                            <div style="font-size:.88rem;font-weight:700;color:#0F172A">{fmt_gnf(cible)}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(cible)}</div>
                         </div>
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Reste</div>
-                            <div style="font-size:.88rem;font-weight:700;color:{'#059669' if atteint else '#DC2626'}">{fmt_gnf(reste) if not atteint else '—'}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:{'#059669' if atteint else '#DC2626'}">{fmt_gnf(reste) if not atteint else '—'}</div>
                         </div>
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Échéance</div>
-                            <div style="font-size:.88rem;font-weight:700;color:#0F172A">{date_c}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{date_c}</div>
                         </div>
+                        {'' if atteint else f'''
+                        <div>
+                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / mois</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf(e_mens)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / semaine</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf(e_hebo)}</div>
+                        </div>'''}
                     </div>
                     </div>""",
                     unsafe_allow_html=True,

@@ -1,7 +1,7 @@
 """Logique métier : calculs du capital, parts, soldes, objectifs."""
 
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from utils.config import TAUX_EUR_GNF_DEFAUT, CAPITAL_CIBLE_GNF, FRAIS_RETRAIT_BAREME
 
 
@@ -766,6 +766,139 @@ def progression_objectifs(
     df["reste_gnf"]    = (df["montant_cible_gnf"] - capital_actuel).clip(lower=0)
     df["atteint"]      = capital_actuel >= df["montant_cible_gnf"]
     return df
+
+
+# ── Effort et statut par objectif ────────────────────────────────────────────
+
+def calculer_effort_objectif(
+    capital_actuel: float,
+    montant_cible_gnf: float,
+    date_cible: str,
+) -> dict:
+    """
+    Calcule l'effort nécessaire pour atteindre un objectif donné.
+
+    Retourne un dict avec :
+      - reste_gnf            : montant encore à réunir
+      - jours_restants       : jours entre aujourd'hui et date_cible
+      - progress_pct         : pourcentage de progression (0-100)
+      - effort_mensuel       : apport mensuel moyen nécessaire
+      - effort_hebdomadaire  : apport hebdomadaire moyen nécessaire
+      - statut               : texte lisible + emoji
+      - couleur_statut       : "green" / "blue" / "amber" / "red"
+    """
+    cible = float(montant_cible_gnf) if montant_cible_gnf else 0.0
+    capital = float(capital_actuel) if capital_actuel else 0.0
+
+    reste_gnf = max(0.0, cible - capital)
+    progress_pct = min((capital / cible * 100) if cible > 0 else 0.0, 100.0)
+
+    try:
+        dc = pd.Timestamp(date_cible).date()
+        jours_restants = (dc - date.today()).days
+    except Exception:
+        jours_restants = 0
+
+    if reste_gnf <= 0:
+        return {
+            "reste_gnf": 0.0,
+            "jours_restants": jours_restants,
+            "progress_pct": progress_pct,
+            "effort_mensuel": 0.0,
+            "effort_hebdomadaire": 0.0,
+            "statut": "Atteint ✅",
+            "couleur_statut": "green",
+        }
+
+    mois_restants = max(jours_restants / 30.0, 0.01)
+    semaines_restantes = max(jours_restants / 7.0, 0.01)
+    effort_mensuel = reste_gnf / mois_restants if mois_restants > 0 else 0.0
+    effort_hebdomadaire = reste_gnf / semaines_restantes if semaines_restantes > 0 else 0.0
+
+    # Statut basé sur progression % et jours restants
+    if progress_pct >= 70:
+        statut, couleur = "Bien avancé 🟢", "green"
+    elif progress_pct >= 45 and jours_restants >= 90:
+        statut, couleur = "En bonne voie 🔵", "blue"
+    elif progress_pct >= 45 and jours_restants < 90:
+        statut, couleur = "À surveiller 🟡", "amber"
+    elif jours_restants < 0:
+        statut, couleur = "Échéance dépassée 🔴", "red"
+    elif jours_restants < 90:
+        statut, couleur = "En retard 🔴", "red"
+    else:
+        statut, couleur = "À surveiller 🟡", "amber"
+
+    return {
+        "reste_gnf": reste_gnf,
+        "jours_restants": jours_restants,
+        "progress_pct": round(progress_pct, 2),
+        "effort_mensuel": round(effort_mensuel),
+        "effort_hebdomadaire": round(effort_hebdomadaire),
+        "statut": statut,
+        "couleur_statut": couleur,
+    }
+
+
+# ── Bilan capital ─────────────────────────────────────────────────────────────
+
+def calculer_bilan_capital(
+    df_mvt: pd.DataFrame,
+    df_cpt: pd.DataFrame,
+    df_depenses: pd.DataFrame | None = None,
+) -> dict:
+    """
+    Bilan consolidé du capital pour le Dashboard.
+
+    Le capital_total_valorise est calculé via calculer_capital_total() (simulation
+    FIFO avec écarts de taux réels/estimatifs). Les dépenses construction sont
+    présentées en vue de pilotage, sans modifier la logique officielle du capital.
+
+    Retourne :
+      - capital_total_valorise         : valeur officielle (= calculer_capital_total)
+      - capital_brut_apporte           : Σ apports (montant_converti_gnf)
+      - total_frais                    : Σ frais_retrait (montant_converti_gnf)
+      - depenses_construction_payees   : Σ dépenses avec statut "Payé"
+      - depenses_construction_total    : Σ toutes dépenses (tous statuts)
+      - depenses_construction_attente  : Σ dépenses non encore payées
+      - capital_liquide_apres_depenses : capital_total_valorise - depenses_construction_payees
+    """
+    capital_total_valorise = calculer_capital_total(df_mvt, df_cpt)
+
+    if df_mvt is None or df_mvt.empty:
+        capital_brut = 0.0
+        total_frais = 0.0
+    else:
+        df = df_mvt.copy()
+        df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0.0)
+        capital_brut = float(
+            df[df["type_mouvement"] == "apport"]["montant_converti_gnf"].sum()
+        )
+        total_frais = float(
+            df[df["type_mouvement"] == "frais_retrait"]["montant_converti_gnf"].sum()
+        )
+
+    dep_payees = 0.0
+    dep_total = 0.0
+    if df_depenses is not None and not df_depenses.empty:
+        df_d = df_depenses.copy()
+        df_d["montant_gnf"] = pd.to_numeric(df_d["montant_gnf"], errors="coerce").fillna(0.0)
+        dep_total = float(df_d["montant_gnf"].sum())
+        dep_payees = float(
+            df_d[df_d["statut_paiement"].astype(str).str.strip() == "Payé"]["montant_gnf"].sum()
+        )
+
+    dep_attente = dep_total - dep_payees
+
+    return {
+        "capital_total_valorise": capital_total_valorise,
+        "capital_brut_apporte": capital_brut,
+        "total_frais": total_frais,
+        "depenses_construction_payees": dep_payees,
+        "depenses_construction_total": dep_total,
+        "depenses_construction_attente": dep_attente,
+        "capital_liquide_apres_depenses": max(0.0, capital_total_valorise - dep_payees),
+    }
 
 
 # ── Évolution temporelle ──────────────────────────────────────────────────────

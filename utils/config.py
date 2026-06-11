@@ -24,6 +24,7 @@ TAUX_EUR_GNF_DEFAUT = 0  # 0 = aucun taux connu, l'utilisateur doit le saisir
 
 # ── Référentiels métier ───────────────────────────────────────────────────────
 TYPES_MOUVEMENT  = ["apport", "transfert", "retrait"]
+TYPES_MOUVEMENT_FILTRE = ["apport", "transfert", "retrait", "frais_retrait"]
 TYPES_COMPTE     = ["banque", "espèces", "mobile money", "YMO", "autre"]
 PAYS_DISPONIBLES = ["France", "Guinée", "Belgique", "Sénégal", "Autre"]
 STATUTS_INVESTISSEUR = ["actif", "inactif", "potentiel"]
@@ -76,21 +77,34 @@ COULEUR_NEUTRE   = "#6b7280"
 
 # ── Labels par type de mouvement ──────────────────────────────────────────────
 EMOJI_MOUVEMENT = {
-    "apport":        "💰",
-    "transfert":     "↔️",
-    "depense":       "💸",
-    "retrait":       "📤",
-    "ajustement":    "🔧",
-    "frais_retrait": "🏧",
+    "apport":                    "💰",
+    "transfert":                 "↔️",
+    "depense":                   "💸",
+    "retrait":                   "📤",
+    "ajustement":                "🔧",
+    "frais_retrait":             "🏧",
+    "frais_orange_marchand":     "🏪",
+}
+
+# Labels d'affichage visuels (remplacent le type brut dans les badges)
+LABELS_MOUVEMENT = {
+    "apport":                "Apport",
+    "transfert":             "Transfert",
+    "depense":               "Dépense",
+    "retrait":               "Retrait",
+    "ajustement":            "Ajustement",
+    "frais_retrait":         "Frais retrait",
+    "frais_orange_marchand": "Frais Orange Marchand",
 }
 
 COULEUR_BADGE_MOUVEMENT = {
-    "apport":        ("#166534", "#dcfce7"),
-    "transfert":     ("#1e40af", "#dbeafe"),
-    "depense":       ("#991b1b", "#fee2e2"),
-    "retrait":       ("#991b1b", "#fee2e2"),
-    "ajustement":    ("#92400e", "#fef3c7"),
-    "frais_retrait": ("#6b21a8", "#f3e8ff"),
+    "apport":                ("#166534", "#dcfce7"),
+    "transfert":             ("#1e40af", "#dbeafe"),
+    "depense":               ("#991b1b", "#fee2e2"),
+    "retrait":               ("#991b1b", "#fee2e2"),
+    "ajustement":            ("#92400e", "#fef3c7"),
+    "frais_retrait":         ("#6b21a8", "#f3e8ff"),
+    "frais_orange_marchand": ("#7c2d12", "#ffedd5"),
 }
 
 # ── Dépenses avant exploitation ───────────────────────────────────────────────

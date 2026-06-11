@@ -5,7 +5,7 @@ Adapté à un usage financier / suivi de capital : sobre, rassurant, SaaS.
 """
 
 import streamlit as st
-from utils.config import COULEUR_BADGE_MOUVEMENT, EMOJI_MOUVEMENT, PROJECT_NAME
+from utils.config import COULEUR_BADGE_MOUVEMENT, EMOJI_MOUVEMENT, LABELS_MOUVEMENT, PROJECT_NAME
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 _ACCENT = {
@@ -758,12 +758,17 @@ def empty_state(icon: str, title: str, description: str = "") -> str:
     )
 
 
-def badge_mouvement(type_mvt: str) -> str:
-    colors = COULEUR_BADGE_MOUVEMENT.get(type_mvt, ("#374151", "#F3F4F6"))
-    emoji  = EMOJI_MOUVEMENT.get(type_mvt, "")
+def badge_mouvement(type_mvt: str, label: str | None = None) -> str:
+    """
+    label : texte affiché dans le badge. Si None, utilise LABELS_MOUVEMENT[type_mvt].
+    type_mvt détermine toujours la couleur et l'emoji.
+    """
+    colors   = COULEUR_BADGE_MOUVEMENT.get(type_mvt, ("#374151", "#F3F4F6"))
+    emoji    = EMOJI_MOUVEMENT.get(type_mvt, "")
+    txt      = label if label is not None else LABELS_MOUVEMENT.get(type_mvt, type_mvt)
     return (
         f'<span class="badge" style="color:{colors[0]};background:{colors[1]}">'
-        f'{emoji}&nbsp;{type_mvt}'
+        f'{emoji}&nbsp;{txt}'
         f'</span>'
     )
 
