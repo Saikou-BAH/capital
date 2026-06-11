@@ -63,6 +63,33 @@ def fmt_taux(taux: float) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+
+def fmt_gnf_court(montant: float, taux: float = 0) -> str:
+    """
+    Format compact pour les grands montants GNF.
+    - < 1 000 000 : format normal  -> "450 000 GNF"
+    - >= 1 000 000 : en millions   -> "43,9 M GNF"
+    Si taux > 0, ajoute l'equivalent EUR -> "43,9 M GNF (~4 184 EUR)"
+    """
+    try:
+        v = float(montant)
+        if v >= 1_000_000:
+            millions = v / 1_000_000
+            if millions >= 100:
+                gnf_txt = f"{millions:.0f} M GNF"
+            else:
+                gnf_txt = f"{millions:.1f} M GNF".replace(".", ",")
+        else:
+            gnf_txt = fmt_gnf(v)
+
+        if taux and float(taux) > 0:
+            eur = v / float(taux)
+            gnf_txt += f" (~{fmt_eur(eur)})"
+        return gnf_txt
+    except (TypeError, ValueError):
+        return "—"
+
+
 # CSS GLOBAL
 # ══════════════════════════════════════════════════════════════════════════════
 

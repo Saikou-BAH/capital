@@ -4,15 +4,15 @@ import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 
-from utils.data_loader import get_objectifs, get_mouvements, get_comptes, add_objectif, update_objectif
+from utils.data_loader import get_objectifs, get_mouvements, get_comptes, get_taux, add_objectif, update_objectif
 from utils.config import (
     OBJECTIF_SEPTEMBRE_ID, OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
     OBJECTIF_DECEMBRE_ID, OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
 )
-from utils.calculs import calculer_capital_total, progression_objectifs, calculer_effort_objectif
+from utils.calculs import calculer_capital_total, progression_objectifs, calculer_effort_objectif, get_dernier_taux
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state,
-    fmt_gnf, fmt_pct, progress_bar, divider, spacer,
+    fmt_gnf, fmt_gnf_court, fmt_pct, progress_bar, divider, spacer,
 )
 from utils.charts import chart_objectifs_gauge
 from utils.runtime import is_read_only_mode, read_only_notice
@@ -23,9 +23,10 @@ st.markdown(page_header("Objectifs", "🎯", "Suivez la progression vers les cib
 
 @st.cache_data(ttl=60)
 def load():
-    return get_objectifs(), get_mouvements(), get_comptes()
+    return get_objectifs(), get_mouvements(), get_comptes(), get_taux()
 
-df_obj, df_mvt, df_cpt = load()
+df_obj, df_mvt, df_cpt, df_taux = load()
+dernier_taux = get_dernier_taux(df_taux)
 objectifs_principaux = pd.DataFrame([
     {
         "id": OBJECTIF_SEPTEMBRE_ID,
@@ -144,11 +145,11 @@ if df_prog is not None and not df_prog.empty:
                         {'' if atteint else f'''
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / mois</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf(e_mens)}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf_court(e_mens, dernier_taux)}</div>
                         </div>
                         <div>
                             <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / semaine</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf(e_hebo)}</div>
+                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf_court(e_hebo, dernier_taux)}</div>
                         </div>'''}
                     </div>
                     </div>""",
