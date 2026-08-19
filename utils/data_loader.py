@@ -25,6 +25,8 @@ if _BACKEND == "sheets":
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
         get_depenses, add_depense, update_depense, delete_depense,
+        get_depenses_repartition, add_depense_repartition,
+        delete_depense_repartition_by_depense,
         is_demo_mode, export_csv,
     )
 else:
@@ -36,6 +38,8 @@ else:
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
         get_depenses, add_depense, update_depense, delete_depense,
+        get_depenses_repartition, add_depense_repartition,
+        delete_depense_repartition_by_depense,
         is_demo_mode, export_csv,
     )
 

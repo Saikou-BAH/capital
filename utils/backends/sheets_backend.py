@@ -19,9 +19,9 @@ from google.oauth2.service_account import Credentials
 
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
-    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES,
+    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES, COLS_DEPENSES_REPARTITION,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
-    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES,
+    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES, SHEET_DEPENSES_REPARTITION,
 )
 
 load_dotenv()
@@ -265,17 +265,57 @@ def get_depenses() -> pd.DataFrame:
 
 def add_depense(nom: str, categorie: str, description: str, montant_gnf: float,
                 compte_utilise: str, date_dep: str, statut_paiement: str,
-                justificatif_note: str = "") -> bool:
-    return _add_row(SHEET_DEPENSES, COLS_DEPENSES, {
-        "id": _new_id("dep-"), "nom": nom, "categorie": categorie,
+                justificatif_note: str = "", frais_gnf: float = 0.0,
+                transport_gnf: float = 0.0, sous_categorie: str = "") -> str | None:
+    dep_id = _new_id("dep-")
+    ok = _add_row(SHEET_DEPENSES, COLS_DEPENSES, {
+        "id": dep_id, "nom": nom, "categorie": categorie, "sous_categorie": sous_categorie,
         "description": description, "montant_gnf": str(montant_gnf),
+        "frais_gnf": str(frais_gnf), "transport_gnf": str(transport_gnf),
         "compte_utilise": compte_utilise, "date": date_dep,
         "statut_paiement": statut_paiement, "justificatif_note": justificatif_note,
         "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
+    return dep_id if ok else None
 
 def update_depense(dep_id: str, updates: dict) -> bool:
     return _update_row(SHEET_DEPENSES, COLS_DEPENSES, dep_id, updates)
 
 def delete_depense(dep_id: str) -> bool:
+    delete_depense_repartition_by_depense(dep_id)
     return _delete_row(SHEET_DEPENSES, COLS_DEPENSES, dep_id)
+
+
+# ── API publique — Répartition des dépenses par investisseur ──────────────────
+
+def get_depenses_repartition() -> pd.DataFrame:
+    return _read_sheet(SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION)
+
+
+def add_depense_repartition(depense_id: str, investisseur_id: str, montant_gnf: float) -> bool:
+    return _add_row(SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION, {
+        "id": _new_id("depinv-"), "depense_id": depense_id,
+        "investisseur_id": investisseur_id, "montant_gnf": str(montant_gnf),
+        "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+
+
+def delete_depense_repartition_by_depense(depense_id: str) -> bool:
+    ss = _get_spreadsheet()
+    if ss is None:
+        _init_session_demo()
+        rows = st.session_state["_sheets_demo"].get(SHEET_DEPENSES_REPARTITION, [])
+        st.session_state["_sheets_demo"][SHEET_DEPENSES_REPARTITION] = [
+            r for r in rows if r.get("depense_id") != depense_id
+        ]
+        return True
+    try:
+        ws = _ensure_ws(ss, SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION)
+        records = ws.get_all_records(expected_headers=COLS_DEPENSES_REPARTITION)
+        for i, rec in reversed(list(enumerate(records, start=2))):
+            if str(rec.get("depense_id")) == depense_id:
+                ws.delete_row(i)
+        return True
+    except Exception as e:
+        st.error(f"Erreur Google Sheets : {e}")
+        return False

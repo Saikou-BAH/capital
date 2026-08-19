@@ -14,9 +14,9 @@ import pandas as pd
 
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
-    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES,
+    COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES, COLS_DEPENSES_REPARTITION,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
-    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES,
+    SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES, SHEET_DEPENSES_REPARTITION,
 )
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -262,20 +262,25 @@ def get_depenses() -> pd.DataFrame:
 
 def add_depense(nom: str, categorie: str, description: str, montant_gnf: float,
                 compte_utilise: str, date_dep: str, statut_paiement: str,
-                justificatif_note: str = "") -> bool:
+                justificatif_note: str = "", frais_gnf: float = 0.0,
+                transport_gnf: float = 0.0, sous_categorie: str = "") -> str | None:
+    dep_id = _new_id("dep-")
     row = {
-        "id":                _new_id("dep-"),
+        "id":                dep_id,
         "nom":               nom,
         "categorie":         categorie,
+        "sous_categorie":    sous_categorie,
         "description":       description,
         "montant_gnf":       str(montant_gnf),
+        "frais_gnf":         str(frais_gnf),
+        "transport_gnf":     str(transport_gnf),
         "compte_utilise":    compte_utilise,
         "date":              date_dep,
         "statut_paiement":   statut_paiement,
         "justificatif_note": justificatif_note,
         "date_creation":     datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-    return _append_csv(SHEET_DEPENSES, COLS_DEPENSES, row)
+    return dep_id if _append_csv(SHEET_DEPENSES, COLS_DEPENSES, row) else None
 
 
 def update_depense(dep_id: str, updates: dict) -> bool:
@@ -283,7 +288,38 @@ def update_depense(dep_id: str, updates: dict) -> bool:
 
 
 def delete_depense(dep_id: str) -> bool:
+    delete_depense_repartition_by_depense(dep_id)
     return _delete_csv(SHEET_DEPENSES, COLS_DEPENSES, dep_id)
+
+
+# ── API publique — Répartition des dépenses par investisseur ──────────────────
+
+def get_depenses_repartition() -> pd.DataFrame:
+    return _read_csv(SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION)
+
+
+def add_depense_repartition(depense_id: str, investisseur_id: str, montant_gnf: float) -> bool:
+    row = {
+        "id":             _new_id("depinv-"),
+        "depense_id":     depense_id,
+        "investisseur_id": investisseur_id,
+        "montant_gnf":    str(montant_gnf),
+        "date_creation":  datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    return _append_csv(SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION, row)
+
+
+def delete_depense_repartition_by_depense(depense_id: str) -> bool:
+    """Supprime toutes les lignes de répartition liées à une dépense (avant réécriture ou suppression)."""
+    path = _csv_path(SHEET_DEPENSES_REPARTITION)
+    try:
+        df = _read_csv(SHEET_DEPENSES_REPARTITION, COLS_DEPENSES_REPARTITION)
+        df = df[df["depense_id"] != depense_id]
+        df.to_csv(path, index=False, sep=";", encoding="utf-8-sig")
+        return True
+    except Exception as e:
+        print(f"[CSV backend] Erreur suppression répartition {depense_id}: {e}")
+        return False
 
 
 # ── Export CSV ────────────────────────────────────────────────────────────────

@@ -960,10 +960,12 @@ def calculer_bilan_capital(
     dep_total = 0.0
     if df_depenses is not None and not df_depenses.empty:
         df_d = df_depenses.copy()
-        df_d["montant_gnf"] = pd.to_numeric(df_d["montant_gnf"], errors="coerce").fillna(0.0)
-        dep_total = float(df_d["montant_gnf"].sum())
+        for c in ("montant_gnf", "frais_gnf", "transport_gnf"):
+            df_d[c] = pd.to_numeric(df_d.get(c, 0), errors="coerce").fillna(0.0)
+        df_d["_total"] = df_d["montant_gnf"] + df_d["frais_gnf"] + df_d["transport_gnf"]
+        dep_total = float(df_d["_total"].sum())
         dep_payees = float(
-            df_d[df_d["statut_paiement"].astype(str).str.strip() == "Payé"]["montant_gnf"].sum()
+            df_d[df_d["statut_paiement"].astype(str).str.strip() == "Payé"]["_total"].sum()
         )
 
     dep_attente = dep_total - dep_payees

@@ -110,9 +110,15 @@ COULEUR_BADGE_MOUVEMENT = {
 # ── Dépenses avant exploitation ───────────────────────────────────────────────
 SHEET_DEPENSES = "depenses_avant_exploitation"
 COLS_DEPENSES = [
-    "id", "nom", "categorie", "description",
-    "montant_gnf", "compte_utilise", "date",
+    "id", "nom", "categorie", "sous_categorie", "description",
+    "montant_gnf", "frais_gnf", "transport_gnf", "compte_utilise", "date",
     "statut_paiement", "justificatif_note", "date_creation",
+]
+
+# Répartition d'une dépense entre plusieurs investisseurs (qui paie quoi)
+SHEET_DEPENSES_REPARTITION = "depenses_repartition_investisseurs"
+COLS_DEPENSES_REPARTITION = [
+    "id", "depense_id", "investisseur_id", "montant_gnf", "date_creation",
 ]
 
 CATEGORIES_DEPENSES = [
@@ -124,20 +130,175 @@ CATEGORIES_DEPENSES = [
     "Forage",
     "Énergie",
     "Main-d'œuvre",
+    "Gestionnaire",
 ]
 
 CATEGORIES_DEPENSES_DESCRIPTIONS = {
-    "Formation":         "Formation du gestionnaire, accompagnement expert avicole, conseils techniques et déplacements.",
-    "Étude du terrain":  "Visite et analyse du terrain, conseils constructeurs, plan d'implantation.",
-    "Transport":         "Transport des matériaux, déplacements, carburant, livraisons et frais logistiques.",
-    "Clôture":           "Matériaux pour la clôture : briques, ciment, sable, gravier, fer, portail.",
-    "Bâtiments":         "Matériaux pour poulailler, magasins, logement, toilettes, bureau, toiture, portes, fenêtres.",
-    "Forage":            "Forage, pompe, tuyaux, château d'eau, réservoirs et installation d'eau.",
-    "Énergie":           "Panneaux solaires, batteries, câbles, lampes et installation électrique.",
-    "Main-d'œuvre":      "Maçons, ouvriers, électriciens, plombiers, soudeurs, menuisiers et autres artisans.",
+    "Formation":         "Formation du gestionnaire, accompagnement expert avicole, conseils techniques, frais de formation et autres dépenses liées à l'apprentissage ou l'accompagnement technique.",
+    "Étude du terrain":  "Visite et analyse du terrain, conseils constructeurs, plan d'implantation, études et préparation technique du chantier avant travaux.",
+    "Transport":         "Transport des matériaux, frais de livraison, carburant de livraison, location de véhicule pour le transport de matériaux et autres frais logistiques du projet.",
+    "Clôture":           "Matériaux et petit matériel de chantier utilisés spécifiquement pour la réalisation de la clôture de Legend Farm.",
+    "Bâtiments":         "Matériaux et équipements pour poulaillers, magasins, logement, toilettes, bureau, toiture, portes, fenêtres et autres travaux de construction des bâtiments.",
+    "Forage":            "Forage, pompe, tuyaux, château d'eau, réservoirs, raccordements et installation d'eau.",
+    "Énergie":           "Panneaux solaires, batteries, câbles, lampes, équipements et installation électrique.",
+    "Main-d'œuvre":      "Rémunération des artisans, ouvriers et prestataires qui réalisent physiquement les travaux : maçons, ferrailleurs, coffreurs, puisatiers, ouvriers, électriciens, plombiers, soudeurs, menuisiers et suivi de chantier.",
+    "Gestionnaire":      "Dépenses personnelles du gestionnaire de Legend Farm : salaire, transport/déplacements, indemnités, carburant et autres frais professionnels liés à ses missions.",
 }
 
-COMPTES_GNF_DEPENSES  = ["Ymo", "Orange Money", "Orange Marchand"]
+# Sous-catégories disponibles pour chaque catégorie principale — un choix direct
+# du type précis de dépense (ex : "Ciment", "Maçon", "Salaire du gestionnaire"),
+# sans niveau intermédiaire générique ("Matériaux", "Divers"...).
+SOUS_CATEGORIES_DEPENSES: dict[str, list[str]] = {
+    "Formation": [
+        "Formation du gestionnaire",
+        "Accompagnement expert avicole",
+        "Conseils techniques",
+        "Déplacements liés à la formation",
+        "Autres frais de formation",
+    ],
+    "Étude du terrain": [
+        "Visite du terrain",
+        "Analyse du terrain",
+        "Conseils constructeurs",
+        "Plan d'implantation",
+        "Études techniques",
+        "Autres frais d'étude du terrain",
+    ],
+    "Transport": [
+        "Transport des matériaux",
+        "Livraison des matériaux",
+        "Carburant lié à la logistique",
+        "Location de véhicule",
+        "Déplacements logistiques",
+        "Autres frais de transport",
+    ],
+    "Clôture": [
+        "Briques",
+        "Ciment",
+        "Sable",
+        "Granite / gravier",
+        "Blocs / pierres pour soubassement",
+        "Fer à béton Ø6",
+        "Fer à béton Ø8",
+        "Fer à béton Ø10",
+        "Fil d'attache",
+        "Planches de coffrage",
+        "Chevrons",
+        "Pointes ordinaires",
+        "Pointes acier",
+        "Ficelle / corde de maçon",
+        "Portail",
+        "Peinture / finition du portail",
+        "Eau de chantier",
+        "Brouette",
+        "Pioche",
+        "Pelle",
+        "Seau",
+        "Gamate",
+        "Fût",
+        "Bassin de chantier",
+        "Autres fournitures de clôture",
+    ],
+    "Bâtiments": [
+        "Briques",
+        "Ciment",
+        "Sable",
+        "Granite / gravier",
+        "Fer à béton",
+        "Bois",
+        "Planches",
+        "Chevrons",
+        "Tôles / toiture",
+        "Portes",
+        "Fenêtres",
+        "Carrelage",
+        "Peinture",
+        "Plomberie",
+        "Électricité bâtiment",
+        "Matériaux poulailler",
+        "Matériaux magasin",
+        "Matériaux logement",
+        "Matériaux toilettes",
+        "Matériaux bureau",
+        "Autres matériaux de bâtiment",
+    ],
+    "Forage": [
+        "Forage",
+        "Pompe",
+        "Tuyaux",
+        "Château d'eau",
+        "Réservoir",
+        "Raccords",
+        "Accessoires hydrauliques",
+        "Installation d'eau",
+        "Autres dépenses de forage",
+    ],
+    "Énergie": [
+        "Panneaux solaires",
+        "Batteries",
+        "Onduleur",
+        "Régulateur",
+        "Câbles électriques",
+        "Lampes",
+        "Protections électriques",
+        "Installation électrique",
+        "Autres équipements énergétiques",
+    ],
+    "Main-d'œuvre": [
+        "Maçon",
+        "Ferrailleur",
+        "Coffreur",
+        "Puisatier",
+        "Ouvrier",
+        "Soudeur",
+        "Plombier",
+        "Électricien",
+        "Menuisier",
+        "Peintre",
+        "Supervision / suivi de chantier",
+        "Autre artisan ou prestataire",
+    ],
+    "Gestionnaire": [
+        "Salaire du gestionnaire",
+        "Transport / déplacements du gestionnaire",
+        "Carburant du gestionnaire",
+        "Indemnités du gestionnaire",
+        "Communication / téléphone du gestionnaire",
+        "Autres frais professionnels du gestionnaire",
+    ],
+}
+
+# Sous-catégories Clôture qui relèvent du petit matériel de chantier (outils),
+# par opposition aux matériaux de construction — utilisé uniquement pour la
+# lecture du panneau devis ci-dessous, ce n'est pas un niveau de classement
+# proposé dans le formulaire de saisie.
+DEVIS_CLOTURE_SOUSCATS_OUTILS = {
+    "Brouette", "Pioche", "Pelle", "Seau", "Gamate", "Fût", "Bassin de chantier",
+}
+
+# ── Devis de référence — chantier Clôture ──────────────────────────────────────
+# Montants de référence issus du devis fournisseur. Ce sont des PRÉVISIONS,
+# jamais enregistrées automatiquement comme dépenses réelles — elles servent
+# uniquement de repère (devis vs dépensé) affiché sur la page Dépenses.
+DEVIS_CLOTURE_MATERIAUX_GNF          = 157_380_000
+DEVIS_CLOTURE_MATERIEL_CHANTIER_GNF  = 4_895_000
+DEVIS_CLOTURE_MAIN_OEUVRE_GNF        = 33_500_000
+DEVIS_CLOTURE_TOTAL_GNF              = 195_775_000
+
+DEVIS_CLOTURE_MATERIEL_CHANTIER_QUANTITES: dict[str, int] = {
+    "Brouette": 2, "Pioche": 3, "Pelle": 4, "Seau": 7, "Corde": 10,
+    "Fût / récipient de stockage d'eau": 1, "Bassin de chantier": 1,
+}
+
+DEVIS_CLOTURE_MAIN_OEUVRE_DETAIL: dict[str, int] = {
+    "Maçon": 14_000_000,
+    "Ferrailleur": 3_500_000,
+    "Coffreur": 4_000_000,
+    "Puisatier": 4_000_000,
+    "Suivi de chantier / supervision": 8_000_000,
+}
+
+COMPTES_GNF_DEPENSES  = ["Ymo", "Orange Money", "Orange Marchand", "Espèces"]
 STATUTS_DEPENSE       = ["Payé", "En attente", "Partiellement payé"]
 
 # ── Frais de retrait cash — barème opérateur (par nom de compte) ──────────────
