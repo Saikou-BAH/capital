@@ -36,11 +36,13 @@ _objectifs     = st.Page("pages/5_Objectifs.py",                   title="Object
 _depenses      = st.Page("pages/8_Depenses_Avant_Exploitation.py", title="Dépenses construction",    icon="🏗️")
 _taux          = st.Page("pages/6_Taux_de_conversion.py",          title="Taux de conversion",        icon="💱")
 _historique    = st.Page("pages/7_Historique.py",                  title="Historique",                icon="📜")
+_simulation    = st.Page("pages/9_Simulation_des_parts.py",         title="Simulation des parts",      icon="🧮")
 
 pg = st.navigation({
     "Pilotage":           [_dashboard],
     "Capital":            [_investisseurs, _comptes, _mouvements, _objectifs],
     "Avant exploitation": [_depenses],
     "Outils":             [_taux, _historique],
+    "Simulation":         [_simulation],
 })
 pg.run()

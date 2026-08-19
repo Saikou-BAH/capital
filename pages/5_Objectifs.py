@@ -108,53 +108,65 @@ if df_prog is not None and not df_prog.empty:
             }
             _sc, _sbg = _statut_color_map.get(c_stat, ("#374151", "#F3F4F6"))
 
+            # Pré-calcul du bloc effort hors f-string principale pour éviter
+            # les f-strings imbriquées (Streamlit peut afficher leurs balises en texte brut)
+            _lbl_style = "font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem"
+            _val_style = "font-size:.85rem;font-weight:700;color:#7C3AED"
+            _reste_color = "#059669" if atteint else "#DC2626"
+            if atteint:
+                _effort_html = ""
+            else:
+                _effort_html = (
+                    "<div>"
+                    f"<div style='{_lbl_style}'>Effort / mois</div>"
+                    f"<div style='{_val_style}'>{fmt_gnf_court(e_mens, dernier_taux)}</div>"
+                    "</div>"
+                    "<div>"
+                    f"<div style='{_lbl_style}'>Effort / semaine</div>"
+                    f"<div style='{_val_style}'>{fmt_gnf_court(e_hebo, dernier_taux)}</div>"
+                    "</div>"
+                )
+
+            _card_html = (
+                '<div class="obj-card">'
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">'
+                "<div>"
+                f'<div class="obj-card-title">{row["nom_objectif"]}</div>'
+                f'<div class="obj-card-desc">{str(row.get("description", ""))[:120]}</div>'
+                "</div>"
+                '<div style="text-align:right;flex-shrink:0;margin-left:1rem">'
+                f'<div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>'
+                f'<div style="font-size:.72rem;color:#94A3B8;margin-top:.15rem;font-weight:500">{jours_txt}</div>'
+                f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
+                f'background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{statut}</span>'
+                "</div>"
+                "</div>"
+                + progress_bar(pct, bar_col, "10px") +
+                '<div style="display:flex;gap:2rem;margin-top:.8rem;flex-wrap:wrap">'
+                "<div>"
+                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Capital actuel</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(capital)}</div>'
+                "</div>"
+                "<div>"
+                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Cible</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(cible)}</div>'
+                "</div>"
+                "<div>"
+                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Reste</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:{_reste_color}">{fmt_gnf(reste) if not atteint else "—"}</div>'
+                "</div>"
+                "<div>"
+                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Échéance</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{date_c}</div>'
+                "</div>"
+                + _effort_html +
+                "</div>"
+                "</div>"
+            )
+
             col_info, col_gauge = st.columns([3, 1])
             with col_info:
-                st.markdown(
-                    f"""<div class="obj-card">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">
-                        <div>
-                            <div class="obj-card-title">{row['nom_objectif']}</div>
-                            <div class="obj-card-desc">{str(row.get('description',''))[:120]}</div>
-                        </div>
-                        <div style="text-align:right;flex-shrink:0;margin-left:1rem">
-                            <div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>
-                            <div style="font-size:.72rem;color:#94A3B8;margin-top:.15rem;font-weight:500">{jours_txt}</div>
-                            <span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;
-                                background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{statut}</span>
-                        </div>
-                    </div>
-                    {progress_bar(pct, bar_col, "10px")}
-                    <div style="display:flex;gap:2rem;margin-top:.8rem;flex-wrap:wrap">
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Capital actuel</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(capital)}</div>
-                        </div>
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Cible</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(cible)}</div>
-                        </div>
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Reste</div>
-                            <div style="font-size:.85rem;font-weight:700;color:{'#059669' if atteint else '#DC2626'}">{fmt_gnf(reste) if not atteint else '—'}</div>
-                        </div>
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Échéance</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#0F172A">{date_c}</div>
-                        </div>
-                        {'' if atteint else f'''
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / mois</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf_court(e_mens, dernier_taux)}</div>
-                        </div>
-                        <div>
-                            <div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Effort / semaine</div>
-                            <div style="font-size:.85rem;font-weight:700;color:#7C3AED">{fmt_gnf_court(e_hebo, dernier_taux)}</div>
-                        </div>'''}
-                    </div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(_card_html, unsafe_allow_html=True)
             with col_gauge:
                 st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
                 st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)

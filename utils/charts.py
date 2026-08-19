@@ -405,10 +405,65 @@ def chart_valeurs_par_compte(df_comptes: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         **_BASE,
         title=dict(text="Valeur par compte", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
-        xaxis=dict(**_AXIS_X, title=None, tickformat=","),
+        xaxis=dict(**_AXIS_X, title=None, tickformat=",", range=[0, df["valeur_gnf"].max() * 1.25]),
         yaxis=dict(**{k: v for k, v in _AXIS_Y.items() if k != "showgrid"}, title=None, showgrid=False),
         height=max(240, 54 * len(df)),
         showlegend=False,
+    )
+    return fig
+
+
+def chart_evolution_soldes_comptes(df_mvt: pd.DataFrame, df_cpt: pd.DataFrame) -> go.Figure:
+    if df_mvt is None or df_mvt.empty or df_cpt is None or df_cpt.empty:
+        return _empty("Aucun mouvement enregistré")
+
+    df = df_mvt.copy()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df = df.dropna(subset=["date"])
+    df["mois"] = df["date"].dt.to_period("M").dt.to_timestamp()
+
+    cpt_map = df_cpt.set_index("id")["nom"].to_dict()
+    all_months = pd.date_range(df["mois"].min(), df["mois"].max(), freq="MS")
+
+    fig = go.Figure()
+    colors = COULEURS_CHART
+
+    for idx, (cpt_id, nom) in enumerate(cpt_map.items()):
+        entrees = df[df["compte_destination_id"] == cpt_id].groupby("mois")["montant_converti_gnf"].sum()
+        sorties = df[df["compte_source_id"] == cpt_id].groupby("mois")["montant_converti_gnf"].sum()
+
+        flux = entrees.subtract(sorties, fill_value=0).reindex(all_months, fill_value=0)
+        cumul = flux.cumsum()
+
+        if cumul.abs().sum() == 0:
+            continue
+
+        color = colors[idx % len(colors)]
+        fig.add_trace(go.Scatter(
+            x=cumul.index,
+            y=cumul.values,
+            mode="lines+markers",
+            name=nom,
+            line=dict(color=color, width=2.2),
+            marker=dict(size=5, line=dict(color="#FFFFFF", width=1.2)),
+            hovertemplate=f"<b>{nom}</b><br>%{{x|%b %Y}}<br>Solde : %{{y:,.0f}} GNF<extra></extra>",
+        ))
+
+    if not fig.data:
+        return _empty("Aucune donnée de solde disponible")
+
+    tick_values = _month_tick_values(all_months, max_ticks=6)
+    fig.update_layout(
+        **_layout_base_without("legend"),
+        title=dict(text="Évolution du solde par compte", font=dict(size=12, color="#475569", weight=700), x=0, xref="paper"),
+        xaxis=dict(**_AXIS_X, title=None, tickmode="array", tickvals=tick_values, tickformat="%b %y", tickangle=-25, automargin=True),
+        yaxis=dict(**_AXIS_Y, title=None, tickformat=","),
+        height=340,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5,
+            font=dict(size=10, color="#94A3B8"), bgcolor="rgba(0,0,0,0)",
+        ),
     )
     return fig
 
@@ -439,11 +494,14 @@ def chart_repartition_devise(df_devise: pd.DataFrame) -> go.Figure:
     if df_devise is None or df_devise.empty:
         return _empty("Aucune donnée devise")
 
+    _color_map = {"EUR": "#2563EB", "GNF": "#059669"}
+    _colors = df_devise["devise"].astype(str).str.upper().map(_color_map).fillna("#64748B").tolist()
+
     fig = go.Figure(go.Pie(
         labels=df_devise["devise"],
         values=df_devise["montant_gnf"],
         hole=0.58,
-        marker=dict(colors=["#2563EB", "#059669"], line=dict(color=_BG, width=2)),
+        marker=dict(colors=_colors, line=dict(color=_BG, width=2)),
         hovertemplate="<b>%{label}</b><br>%{value:,.0f} GNF · %{percent}<extra></extra>",
         textinfo="percent+label",
         textfont=dict(size=10),
