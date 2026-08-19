@@ -62,18 +62,19 @@ COLS_TAUX = ["id", "date_taux", "eur_to_gnf", "commentaire", "created_at"]
 # Modes de backend disponibles
 BACKENDS_DISPONIBLES = ["csv", "sheets"]
 
-# ── Palette de couleurs ───────────────────────────────────────────────────────
+# ── Palette de couleurs — identité Legend Farm (terre cuite chaude, tons
+#    coordonnés plutôt qu'un arc-en-ciel saturé générique) ─────────────────────
 COULEURS_CHART = [
-    "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
-    "#8b5cf6", "#06b6d4", "#f97316", "#ec4899",
+    "#B65C2E", "#3E7C51", "#99651A", "#46688A",
+    "#6B5B95", "#8C6E4A", "#5C8374", "#A24D4D",
 ]
 
-COULEUR_PRIMAIRE = "#3b82f6"
-COULEUR_SUCCES   = "#10b981"
-COULEUR_DANGER   = "#ef4444"
-COULEUR_WARNING  = "#f59e0b"
-COULEUR_VIOLET   = "#8b5cf6"
-COULEUR_NEUTRE   = "#6b7280"
+COULEUR_PRIMAIRE = "#B65C2E"
+COULEUR_SUCCES   = "#3E7C51"
+COULEUR_DANGER   = "#B3432F"
+COULEUR_WARNING  = "#99651A"
+COULEUR_VIOLET   = "#6B5B95"
+COULEUR_NEUTRE   = "#6B6155"
 
 # ── Labels par type de mouvement ──────────────────────────────────────────────
 EMOJI_MOUVEMENT = {
@@ -299,7 +300,7 @@ DEVIS_CLOTURE_MAIN_OEUVRE_DETAIL: dict[str, int] = {
 }
 
 COMPTES_GNF_DEPENSES  = ["Ymo", "Orange Money", "Orange Marchand", "Espèces"]
-STATUTS_DEPENSE       = ["Payé", "En attente", "Partiellement payé"]
+STATUTS_DEPENSE       = ["En attente", "Payé", "Partiellement payé"]
 
 # ── Frais de retrait cash — barème opérateur (par nom de compte) ──────────────
 # Chaque entrée : liste de (montant_min, montant_max, taux)

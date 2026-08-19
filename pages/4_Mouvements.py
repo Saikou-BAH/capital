@@ -4,14 +4,15 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-from utils.config import TYPES_MOUVEMENT, TYPES_MOUVEMENT_FILTRE, DEVISES, TAUX_EUR_GNF_DEFAUT, FRAIS_RETRAIT_BAREME, ORANGE_MONEY_MAX_RETRAIT_GNF
+from utils.config import TYPES_MOUVEMENT, DEVISES, TAUX_EUR_GNF_DEFAUT, FRAIS_RETRAIT_BAREME, ORANGE_MONEY_MAX_RETRAIT_GNF
 from utils.data_loader import (
-    get_mouvements, get_investisseurs, get_comptes, get_taux, add_mouvement,
+    get_mouvements, get_investisseurs, get_comptes, get_taux, add_mouvement, delete_mouvement,
 )
 from utils.calculs import convertir_en_gnf, get_dernier_taux, get_apports_disponibles, calcul_valeur_apport, get_transferts_gnf_sur_compte, get_frais_retrait_cash
 from utils.formatting import (
     inject_css, kpi_card, page_header, section_header, preview_card,
     fmt_gnf, fmt_eur, fmt_taux, badge_mouvement, divider, spacer,
+    empty_state, confirm_delete, form_step,
 )
 from utils.charts import chart_frais_retrait_par_mois
 from utils.runtime import is_read_only_mode, read_only_notice
@@ -63,16 +64,16 @@ st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Graphique frais de retrait ────────────────────────────────────────────────
 if not df_mvt.empty and nb_frais > 0:
-    st.markdown(section_header("Frais de retrait", "🏧", "#7C3AED"), unsafe_allow_html=True)
+    st.markdown(section_header("Frais de retrait", "🏧", "#6B5B95"), unsafe_allow_html=True)
     st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
-    st.plotly_chart(chart_frais_retrait_par_mois(df_mvt), use_container_width=True)
+    st.plotly_chart(chart_frais_retrait_par_mois(df_mvt), use_container_width=True, config={"displayModeBar": False})
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown(divider(), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FORMULAIRE
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown(section_header("Enregistrer un mouvement", "➕", "#2563EB"), unsafe_allow_html=True)
+st.markdown(section_header("Enregistrer un mouvement", "➕", "#B65C2E"), unsafe_allow_html=True)
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
 TYPE_HELP = {
@@ -84,12 +85,10 @@ TYPE_HELP = {
 if READ_ONLY:
     read_only_notice("L'enregistrement des mouvements")
 
+st.markdown('<div class="card" style="padding:1.4rem 1.6rem">', unsafe_allow_html=True)
+
 # ── Étape 1 : Type de mouvement ───────────────────────────────────────────────
-st.markdown(
-    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
-    'color:#94A3B8;margin-bottom:.4rem">Étape 1 — Type de mouvement</div>',
-    unsafe_allow_html=True,
-)
+st.markdown(form_step(1, "Type de mouvement", first=True), unsafe_allow_html=True)
 type_mvt = st.radio(
     "Type de mouvement",
     TYPES_MOUVEMENT,
@@ -102,8 +101,8 @@ icn, clr, txt = TYPE_HELP.get(type_mvt, ("ℹ️", "blue", ""))
 st.markdown(spacer("0.15rem"), unsafe_allow_html=True)
 
 # Indicateur visuel du type sélectionné
-_type_colors = {"apport": ("#059669", "#ECFDF5", "#A7F3D0"), "transfert": ("#2563EB", "#EFF6FF", "#BFDBFE"), "retrait": ("#D97706", "#FFFBEB", "#FDE68A")}
-_tc, _tbg, _tbr = _type_colors.get(type_mvt, ("#475569", "#F8FAFC", "#CBD5E1"))
+_type_colors = {"apport": ("#3E7C51", "#EEF5EF", "#BFD9C4"), "transfert": ("#B65C2E", "#FBF0E7", "#F0D9C4"), "retrait": ("#99651A", "#FBF3E4", "#EAD2A0")}
+_tc, _tbg, _tbr = _type_colors.get(type_mvt, ("#6B6155", "#F5F1EA", "#E8E1D6"))
 st.markdown(
     f'<div style="background:{_tbg};border:1px solid {_tbr};border-radius:8px;'
     f'padding:.45rem .85rem;font-size:.83rem;color:{_tc};font-weight:500;margin-bottom:.5rem">'
@@ -112,11 +111,7 @@ st.markdown(
 )
 
 # ── Étape 2 : Comptes ────────────────────────────────────────────────────────
-st.markdown(
-    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
-    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 2 — Comptes & investisseur</div>',
-    unsafe_allow_html=True,
-)
+st.markdown(form_step(2, "Comptes & investisseur"), unsafe_allow_html=True)
 
 cpt_opts     = {cid: nm for cid, nm in noms_cpt.items()}
 cpt_opts_eur = {cid: nm for cid, nm in noms_cpt.items() if compte_devises.get(cid, "") == "EUR"}
@@ -217,8 +212,8 @@ elif type_mvt == "transfert":
             nom_inv_apport = noms_inv.get(inv_id, inv_id)
             nom_src_apport = noms_cpt.get(src_id, src_id)
             st.markdown(
-                f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
-                f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2rem">'
+                f'<div style="background:#FBF0E7;border:1px solid #F0D9C4;border-radius:8px;'
+                f'padding:.55rem .85rem;font-size:.84rem;color:#9C4B22;margin-top:.2rem;display:flex;gap:2rem">'
                 f'<span>👤 <strong>{nom_inv_apport}</strong></span>'
                 f'<span>🏦 Depuis : <strong>{nom_src_apport}</strong></span>'
                 f'<span>💶 Solde : <strong>{fmt_eur(eur_max)}</strong></span>'
@@ -320,12 +315,12 @@ elif type_mvt == "transfert":
                     gnf_disponible_src = _dispos.get(sel_transfert_gnf_id, 0.0)
 
                     st.markdown(
-                        f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
-                        f'padding:.55rem .85rem;font-size:.84rem;color:#1D4ED8;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
+                        f'<div style="background:#FBF0E7;border:1px solid #F0D9C4;border-radius:8px;'
+                        f'padding:.55rem .85rem;font-size:.84rem;color:#9C4B22;margin-top:.2rem;display:flex;gap:2.5rem;flex-wrap:wrap">'
                         f'<span>👤 <strong>{nom_inv_t}</strong></span>'
                         f'<span>📅 Reçu le <strong>{dt_t}</strong></span>'
                         f'<span>💰 Total reçu : <strong>{fmt_gnf(gnf_recu)}</strong></span>'
-                        f'<span>✅ Disponible : <strong style="color:#065F46">{fmt_gnf(gnf_disponible_src)}</strong></span>'
+                        f'<span>✅ Disponible : <strong style="color:#2F5D3C">{fmt_gnf(gnf_disponible_src)}</strong></span>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -375,11 +370,7 @@ st.markdown(spacer("0.1rem"), unsafe_allow_html=True)
 _frais_dst = compte_frais.get(dst_id, 0.0) if dst_id else 0.0
 
 # ── Étape 3 : Montant ────────────────────────────────────────────────────────
-st.markdown(
-    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
-    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 3 — Montant</div>',
-    unsafe_allow_html=True,
-)
+st.markdown(form_step(3, "Montant"), unsafe_allow_html=True)
 
 # ── Ligne montant + devise + taux + résultat ──────────────────────────────
 _transfert_apport_mode = (type_mvt == "transfert" and bool(sel_apport_id))
@@ -398,11 +389,11 @@ with cm2:
     if type_mvt == "apport":
         devise = "EUR"
         st.markdown("<div style='font-weight:600;margin-bottom:.35rem'>Devise</div>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size:1rem;color:#1F2937'>EUR</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1rem;color:#241F19'>EUR</div>", unsafe_allow_html=True)
     elif type_mvt == "transfert" and _transfert_apport_mode:
         devise = "EUR"
         st.markdown("<div style='font-weight:600;margin-bottom:.35rem'>Devise</div>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size:1rem;color:#1F2937'>EUR</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1rem;color:#241F19'>EUR</div>", unsafe_allow_html=True)
     elif type_mvt == "transfert":
         devise = st.selectbox("Devise *", DEVISES, index=DEVISES.index("GNF"), key="mvt_devise_transfert", disabled=READ_ONLY)
     else:
@@ -437,6 +428,7 @@ with cm4:
 _preview_rows = []
 _preview_color = "blue"
 _preview_footer = ""
+_preview_matched_special = False
 
 # Preview gain/perte de taux (transfert EUR depuis un apport)
 if _transfert_apport_mode and montant > 0 and taux > 0:
@@ -460,6 +452,7 @@ if _transfert_apport_mode and montant > 0 and taux > 0:
         ]
         _preview_color = gain_color
         _preview_footer = "Impact sur le capital : +{} GNF".format(fmt_gnf(gnf_reel))
+        _preview_matched_special = True
 
 # Preview frais de retrait cash (Orange Money)
 _nom_src = noms_cpt.get(src_id, "") if src_id else ""
@@ -490,6 +483,7 @@ if type_mvt == "retrait" and _nom_src in FRAIS_RETRAIT_BAREME and montant_gnf > 
             ]
             _preview_color = "violet"
             _preview_footer = f"Impact capital : −{fmt_gnf(_frais_cash_gnf)} (frais) · −{fmt_gnf(montant_gnf)} (retrait)"
+            _preview_matched_special = True
 
 # Preview frais sur transfert entrant
 elif type_mvt == "transfert" and _frais_dst > 0 and dst_id and montant_gnf > 0:
@@ -504,24 +498,45 @@ elif type_mvt == "transfert" and _frais_dst > 0 and dst_id and montant_gnf > 0:
     ]
     _preview_color = "amber"
     _preview_footer = f"Un mouvement frais_retrait de {fmt_gnf(_frais_dst_gnf)} sera créé automatiquement."
+    _preview_matched_special = True
+
+# Aperçu générique — couvre tous les autres cas (aucun frais, aucun écart de taux) pour que
+# la prévisualisation soit systématique, pas seulement sur les scénarios à calcul particulier.
+if not _preview_matched_special and montant_gnf > 0:
+    _label_type = {"apport": "Apport", "transfert": "Transfert", "retrait": "Retrait"}.get(type_mvt, str(type_mvt).capitalize())
+    _preview_rows = [("Type de mouvement", _label_type, "slate")]
+    if devise == "EUR":
+        _preview_rows.append(("Montant envoyé", fmt_eur(montant), "slate"))
+        _preview_rows.append(("Taux appliqué", f"{taux:,.0f} GNF/€".replace(",", " "), "slate"))
+        _preview_rows.append(("Montant converti GNF", fmt_gnf(montant_gnf), "blue"))
+    else:
+        _preview_rows.append(("Montant", fmt_gnf(montant_gnf), "blue"))
+    if src_id:
+        _preview_rows.append(("Compte source", noms_cpt.get(src_id, src_id), "slate"))
+    if dst_id:
+        _preview_rows.append(("Compte destination", noms_cpt.get(dst_id, dst_id), "slate"))
+    if inv_id:
+        _preview_rows.append(("Investisseur", noms_inv.get(inv_id, inv_id), "slate"))
+
+    if type_mvt == "apport":
+        _preview_color = "green"
+        _preview_footer = f"Impact sur le capital : +{fmt_gnf(montant_gnf)}"
+    elif type_mvt == "retrait":
+        _preview_color = "red"
+        _preview_footer = f"Impact sur le capital : −{fmt_gnf(montant_gnf)}"
+    elif type_mvt == "transfert":
+        _preview_color = "blue"
+        _preview_footer = "Transfert interne — le capital total valorisé ne change pas."
 
 if _preview_rows and montant_gnf > 0:
-    st.markdown(
-        '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
-        'color:#94A3B8;margin:.75rem 0 .4rem">Étape 4 — Aperçu de l\'opération</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(form_step(4, "Aperçu de l'opération"), unsafe_allow_html=True)
     st.markdown(
         preview_card("Simulation avant validation", _preview_rows, _preview_color, _preview_footer),
         unsafe_allow_html=True,
     )
 
 # ── Étape 5 : Valider ─────────────────────────────────────────────────────────
-st.markdown(
-    '<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;'
-    'color:#94A3B8;margin:.75rem 0 .4rem">Étape 5 — Commentaire & validation</div>',
-    unsafe_allow_html=True,
-)
+st.markdown(form_step(5, "Commentaire & validation"), unsafe_allow_html=True)
 
 commentaire = st.text_area("Commentaire", placeholder="Description du mouvement…", height=70, key="mvt_commentaire", disabled=READ_ONLY)
 compte_dans_capital = type_mvt in ("apport", "retrait")
@@ -541,7 +556,7 @@ if submitted:
         elif compte_devises.get(dst_id, "") != "EUR":
             errors.append("Un apport en EUR doit être enregistré vers un compte en EUR.")
     if type_mvt in ("depense", "retrait") and not src_id:
-        errors.append("Une dépense requiert un compte source.")
+        errors.append("Un retrait requiert un compte source — choisissez le compte d'où sort l'argent.")
     if type_mvt == "retrait" and src_id and _nom_src in FRAIS_RETRAIT_BAREME:
         if montant_gnf > ORANGE_MONEY_MAX_RETRAIT_GNF:
             errors.append(
@@ -643,65 +658,45 @@ if submitted:
             st.cache_data.clear()
             st.rerun()
 
+st.markdown('</div>', unsafe_allow_html=True)
+
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLEAU DES MOUVEMENTS
+# DERNIÈRES OPÉRATIONS — le tableau complet, les filtres et la recherche vivent
+# désormais sur la page Historique (voir lien ci-dessous) pour éviter deux
+# grands tableaux quasi identiques.
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown(section_header("Historique des mouvements", "📋", "#475569"), unsafe_allow_html=True)
+_col_hd, _col_lk = st.columns([5, 1.5])
+with _col_hd:
+    st.markdown(section_header("Dernières opérations", "📋", "#6B6155"), unsafe_allow_html=True)
+with _col_lk:
+    st.markdown(spacer("1rem"), unsafe_allow_html=True)
+    st.page_link("pages/7_Historique.py", label="Historique complet →", icon="📜")
+
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
-# Filtres
-f1, f2, f3, f4, f5 = st.columns(5)
-with f1:
-    f_type = st.multiselect("Type", TYPES_MOUVEMENT_FILTRE, key="f_mvt_type")
-with f2:
-    inv_choices = ["Tous"] + sorted(noms_inv.values())
-    f_inv = st.selectbox("Investisseur", inv_choices, key="f_mvt_inv")
-with f3:
-    f_dev = st.multiselect("Devise", DEVISES, key="f_mvt_dev")
-with f4:
-    f_dmin = st.date_input("Du", value=None, key="f_mvt_dmin")
-with f5:
-    f_dmax = st.date_input("Au", value=None, key="f_mvt_dmax")
-
-st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
-
 if not df_mvt.empty:
-    df_show = df_mvt.copy()
-    df_show["date"] = pd.to_datetime(df_show["date"], errors="coerce")
-    df_show["investisseur"] = df_show["investisseur_id"].map(noms_inv).fillna(df_show["investisseur_id"])
-    df_show["src_nom"]      = df_show["compte_source_id"].map(noms_cpt).fillna("—")
-    df_show["dst_nom"]      = df_show["compte_destination_id"].map(noms_cpt).fillna("—")
+    df_recent = df_mvt.copy()
+    df_recent["date"] = pd.to_datetime(df_recent["date"], errors="coerce")
+    df_recent["montant_converti_gnf"] = pd.to_numeric(df_recent["montant_converti_gnf"], errors="coerce").fillna(0)
+    df_recent["investisseur"] = df_recent["investisseur_id"].map(noms_inv).fillna(df_recent["investisseur_id"])
+    df_recent["src_nom"]      = df_recent["compte_source_id"].map(noms_cpt).fillna("—")
+    df_recent["dst_nom"]      = df_recent["compte_destination_id"].map(noms_cpt).fillna("—")
+    df_recent = df_recent.sort_values("date", ascending=False).head(8)
 
-    if f_type:
-        df_show = df_show[df_show["type_mouvement"].isin(f_type)]
-    if f_inv != "Tous":
-        df_show = df_show[df_show["investisseur"] == f_inv]
-    if f_dev:
-        df_show = df_show[df_show["devise_origine"].isin(f_dev)]
-    if f_dmin:
-        df_show = df_show[df_show["date"] >= pd.Timestamp(f_dmin)]
-    if f_dmax:
-        df_show = df_show[df_show["date"] <= pd.Timestamp(f_dmax)]
+    st.markdown('<div class="card" style="padding:1rem 1.25rem">', unsafe_allow_html=True)
 
-    df_show = df_show.sort_values("date", ascending=False)
-
-    st.markdown(
-        f'<div style="font-size:.78rem;color:#94A3B8;font-weight:500;margin-bottom:.75rem">'
-        f'{len(df_show)} mouvement(s)</div>',
-        unsafe_allow_html=True,
-    )
-
-    # En-têtes
-    h = st.columns([1.4, 1.8, 2.2, 3, 2, 2, 3])
-    for col, lbl in zip(h, ["Date", "Type", "Investisseur", "Montant GNF", "Source", "Destination", "Commentaire"]):
+    h = st.columns([1.3, 1.6, 2, 2.4, 1.7, 1.7, 2.2, 1.1])
+    _mv_labels = ["Date", "Type", "Investisseur", "Montant GNF", "Source", "Destination", "Commentaire", ""]
+    _mv_classes = ["th", "th", "th", "th th-num", "th", "th", "th", "th"]
+    for col, lbl, cls in zip(h, _mv_labels, _mv_classes):
         with col:
-            st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
-    st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.4rem 0">', unsafe_allow_html=True)
+            st.markdown(f'<div class="{cls}">{lbl}</div>', unsafe_allow_html=True)
+    st.markdown('<hr style="border:none;border-top:1.5px solid #E8E1D6;margin:.4rem 0">', unsafe_allow_html=True)
 
-    for _, row in df_show.iterrows():
-        c1,c2,c3,c4,c5,c6,c7 = st.columns([1.4,1.8,2.2,3,2,2,3])
+    for _, row in df_recent.iterrows():
+        c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([1.3, 1.6, 2, 2.4, 1.7, 1.7, 2.2, 1.1])
         with c1:
             st.markdown(f'<div class="row-date">{str(row["date"])[:10] if pd.notna(row["date"]) else "—"}</div>', unsafe_allow_html=True)
         with c2:
@@ -714,17 +709,29 @@ if not df_mvt.empty:
                     _badge_label = "Frais Orange Marchand"
             st.markdown(badge_mouvement(_type_row, label=_badge_label), unsafe_allow_html=True)
         with c3:
-            st.markdown(f'<div style="font-size:.85rem;color:#334155;font-weight:500">{row.get("investisseur","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:.85rem;color:#4A4238;font-weight:500">{row.get("investisseur","—")}</div>', unsafe_allow_html=True)
         with c4:
             st.markdown(f'<div class="row-amount">{fmt_gnf(row["montant_converti_gnf"])}</div>', unsafe_allow_html=True)
             if str(row.get("devise_origine","")) == "EUR":
-                st.markdown(f'<div class="row-comment">{fmt_eur(row["montant_origine"])} @ {fmt_taux(row["taux_eur_gnf"])}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="row-comment num">{fmt_eur(row["montant_origine"])} @ {fmt_taux(row["taux_eur_gnf"])}</div>', unsafe_allow_html=True)
         with c5:
             st.markdown(f'<div class="row-comment">{row.get("src_nom","—")}</div>', unsafe_allow_html=True)
         with c6:
             st.markdown(f'<div class="row-comment">{row.get("dst_nom","—")}</div>', unsafe_allow_html=True)
         with c7:
-            st.markdown(f'<div class="row-comment">{str(row.get("commentaire",""))[:60]}</div>', unsafe_allow_html=True)
-        st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.25rem 0">', unsafe_allow_html=True)
+            st.markdown(f'<div class="row-comment">{str(row.get("commentaire",""))[:50]}</div>', unsafe_allow_html=True)
+        with c8:
+            if not READ_ONLY:
+                _desc = f"ce mouvement du {str(row['date'])[:10]} ({fmt_gnf(row['montant_converti_gnf'])})"
+                if confirm_delete(f"mvt_del_{row['id']}", _desc):
+                    if delete_mouvement(row["id"]):
+                        st.cache_data.clear()
+                        st.rerun()
+        st.markdown('<hr style="border:none;border-top:1px solid #F5F1EA;margin:.25rem 0">', unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 else:
-    st.info("Aucun mouvement enregistré. Utilisez le formulaire ci-dessus.")
+    st.markdown(
+        empty_state("💸", "Aucun mouvement enregistré", "Utilisez le formulaire ci-dessus pour créer le premier mouvement."),
+        unsafe_allow_html=True,
+    )

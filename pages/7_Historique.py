@@ -10,6 +10,7 @@ from utils.calculs import evolution_capital
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state,
     fmt_gnf, fmt_eur, fmt_taux, badge_mouvement, divider, spacer,
+    confirm_delete, paginate,
 )
 from utils.charts import chart_evolution_capital
 from utils.runtime import is_read_only_mode
@@ -65,22 +66,22 @@ with c4:
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Courbe ────────────────────────────────────────────────────────────────────
-st.markdown(section_header("Évolution du capital", "📈", "#059669"), unsafe_allow_html=True)
+st.markdown(section_header("Évolution du capital", "📈", "#3E7C51"), unsafe_allow_html=True)
 st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
-st.plotly_chart(chart_evolution_capital(evolution_capital(df_mvt, df_cpt)), use_container_width=True)
+st.plotly_chart(chart_evolution_capital(evolution_capital(df_mvt, df_cpt)), use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Filtres ───────────────────────────────────────────────────────────────────
-st.markdown(section_header("Filtres avancés", "🔍", "#475569"), unsafe_allow_html=True)
+st.markdown(section_header("Filtres avancés", "🔍", "#6B6155"), unsafe_allow_html=True)
 
 r1 = st.columns(5)
-with r1[0]: f_type  = st.multiselect("Type", TYPES_MOUVEMENT)
+with r1[0]: f_type  = st.multiselect("Type", TYPES_MOUVEMENT, placeholder="Tous")
 with r1[1]: f_inv   = st.selectbox("Investisseur", ["Tous"] + sorted(noms_inv.values()))
-with r1[2]: f_dev   = st.multiselect("Devise", DEVISES)
-with r1[3]: f_dmin  = st.date_input("Du", value=None, key="h_dmin")
-with r1[4]: f_dmax  = st.date_input("Au", value=None, key="h_dmax")
+with r1[2]: f_dev   = st.multiselect("Devise", DEVISES, placeholder="Toutes")
+with r1[3]: f_dmin  = st.date_input("Du", value=None, key="h_dmin", format="DD/MM/YYYY")
+with r1[4]: f_dmax  = st.date_input("Au", value=None, key="h_dmax", format="DD/MM/YYYY")
 
 r2 = st.columns(5)
 with r2[0]: f_pays    = st.selectbox("Pays destination", ["Tous"] + PAYS_DISPONIBLES)
@@ -123,7 +124,7 @@ nb = len(df_show) if not df_show.empty else 0
 col_count, col_export = st.columns([4, 1])
 with col_count:
     st.markdown(
-        f'<div style="font-size:.78rem;font-weight:600;color:#94A3B8;margin-bottom:.5rem">'
+        f'<div style="font-size:.78rem;font-weight:600;color:#6B6155;margin-bottom:.5rem">'
         f'{nb} mouvement(s) affiché(s)</div>',
         unsafe_allow_html=True,
     )
@@ -143,14 +144,20 @@ if df_show.empty:
         unsafe_allow_html=True,
     )
 else:
+    df_page = paginate(df_show, "hist_mvt", page_size=25)
+
+    st.markdown('<div class="table-scroll"><div style="min-width:920px">', unsafe_allow_html=True)
+
     # En-têtes
     hh = st.columns([1.4, 1.8, 2.2, 3, 2, 2, 1.4, 2.5])
-    for col, lbl in zip(hh, ["Date", "Type", "Investisseur", "Montant (GNF)", "Source", "Destination", "Action", "Commentaire"]):
+    _hist_labels = ["Date", "Type", "Investisseur", "Montant (GNF)", "Source", "Destination", "Action", "Commentaire"]
+    _hist_classes = ["th", "th", "th", "th th-num", "th", "th", "th", "th"]
+    for col, lbl, cls in zip(hh, _hist_labels, _hist_classes):
         with col:
-            st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
-    st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
+            st.markdown(f'<div class="{cls}">{lbl}</div>', unsafe_allow_html=True)
+    st.markdown('<hr style="border:none;border-top:1.5px solid #E8E1D6;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
 
-    for _, row in df_show.iterrows():
+    for _, row in df_page.iterrows():
         in_cap = str(row.get("compte_dans_capital","")).lower() in ["true","1","oui"]
         c1,c2,c3,c4,c5,c6,c7,c8 = st.columns([1.4,1.8,2.2,3,2,2,1.4,2.5])
         with c1:
@@ -158,42 +165,43 @@ else:
         with c2:
             st.markdown(badge_mouvement(str(row["type_mouvement"])), unsafe_allow_html=True)
         with c3:
-            st.markdown(f'<div style="font-size:.84rem;color:#334155;font-weight:500">{row.get("investisseur","—")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:.84rem;color:#4A4238;font-weight:500">{row.get("investisseur","—")}</div>', unsafe_allow_html=True)
         with c4:
-            cap_dot = '<span style="color:#059669;font-size:.55rem">●</span>' if in_cap else '<span style="color:#CBD5E1;font-size:.55rem">●</span>'
+            cap_dot = '<span style="color:#3E7C51;font-size:.55rem">●</span>' if in_cap else '<span style="color:#E8E1D6;font-size:.55rem">●</span>'
             extra = ""
             if str(row.get("devise_origine", "")).upper() != "GNF":
                 extra = f' · {fmt_eur(row["montant_origine"])} @ {fmt_taux(row["taux_eur_gnf"])}'
             st.markdown(
                 f'<div class="row-amount">{fmt_gnf(row["montant_converti_gnf"])}</div>'
-                f'<div class="row-comment">{cap_dot} {"Capital" if in_cap else "Hors capital"}{extra}</div>',
+                f'<div class="row-comment num">{cap_dot} {"Capital" if in_cap else "Hors capital"}{extra}</div>',
                 unsafe_allow_html=True,
             )
         with c5:
             st.markdown(
                 f'<div class="row-comment">{row.get("src_nom","—")}'
-                f'<br><span style="color:#CBD5E1">{row.get("pays_src","")}</span></div>',
+                f'<br><span style="color:#E8E1D6">{row.get("pays_src","")}</span></div>',
                 unsafe_allow_html=True,
             )
         with c6:
             st.markdown(
                 f'<div class="row-comment">{row.get("dst_nom","—")}'
-                f'<br><span style="color:#CBD5E1">{row.get("pays_dst","")}</span></div>',
+                f'<br><span style="color:#E8E1D6">{row.get("pays_dst","")}</span></div>',
                 unsafe_allow_html=True,
             )
         with c7:
-            can_delete = True
-            if can_delete and not READ_ONLY:
-                if st.button("🗑️", key=f"del_{row['id']}", help="Supprimer"):
+            if not READ_ONLY:
+                _desc = f"ce mouvement du {str(row['date'])[:10]} ({fmt_gnf(row['montant_converti_gnf'])})"
+                if confirm_delete(f"hist_del_{row['id']}", _desc):
                     if delete_mouvement(row["id"]):
-                        st.success("Supprimé.")
                         st.cache_data.clear()
                         st.rerun()
                     else:
                         st.error("Impossible de supprimer.")
             else:
-                st.markdown('<div style="color:#CBD5E1;font-size:.75rem;padding-top:.2rem">—</div>', unsafe_allow_html=True)
+                st.markdown('<div style="color:#E8E1D6;font-size:.75rem;padding-top:.2rem">—</div>', unsafe_allow_html=True)
         with c8:
             st.markdown(f'<div class="row-comment">{str(row.get("commentaire",""))[:65]}</div>', unsafe_allow_html=True)
 
-        st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.25rem 0">', unsafe_allow_html=True)
+        st.markdown('<hr style="border:none;border-top:1px solid #F5F1EA;margin:.25rem 0">', unsafe_allow_html=True)
+
+    st.markdown('</div></div>', unsafe_allow_html=True)

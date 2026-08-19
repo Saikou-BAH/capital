@@ -61,7 +61,7 @@ st.markdown(divider(), unsafe_allow_html=True)
 col_sim, col_chart = st.columns([1, 2])
 
 with col_sim:
-    st.markdown(section_header("Simulateur de conversion", "🧮", "#7C3AED"), unsafe_allow_html=True)
+    st.markdown(section_header("Simulateur de conversion", "🧮", "#6B5B95"), unsafe_allow_html=True)
 
     st.markdown('<div class="card" style="padding:1.25rem 1.4rem">', unsafe_allow_html=True)
     montant_eur = st.number_input("Montant en EUR", min_value=0.0, value=0.0, step=100.0)
@@ -90,9 +90,9 @@ with col_sim:
     )
 
 with col_chart:
-    st.markdown(section_header("Historique du taux", "📈", "#2563EB"), unsafe_allow_html=True)
+    st.markdown(section_header("Historique du taux", "📈", "#B65C2E"), unsafe_allow_html=True)
     st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
-    st.plotly_chart(chart_historique_taux(df_taux), use_container_width=True)
+    st.plotly_chart(chart_historique_taux(df_taux), use_container_width=True, config={"displayModeBar": False})
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
@@ -107,7 +107,7 @@ with st.expander("➕ Enregistrer un nouveau taux", expanded=False):
 
         col1, col2 = st.columns(2)
         with col1:
-            date_taux_val = st.date_input("Date du taux *", value=date.today())
+            date_taux_val = st.date_input("Date du taux *", value=date.today(), format="DD/MM/YYYY")
             taux_val      = st.number_input(
                 "Taux EUR → GNF *",
                 min_value=0.0, value=float(dernier_taux) if dernier_taux > 0 else 0.0,
@@ -141,7 +141,7 @@ st.markdown(divider(), unsafe_allow_html=True)
 # ── Historique ────────────────────────────────────────────────────────────────
 col_title, col_export = st.columns([4, 1])
 with col_title:
-    st.markdown(section_header("Historique des taux", "📋", "#475569"), unsafe_allow_html=True)
+    st.markdown(section_header("Historique des taux", "📋", "#6B6155"), unsafe_allow_html=True)
 with col_export:
     if not df_sort.empty:
         csv_bytes = export_csv(df_sort.assign(date_taux=df_sort["date_taux"].astype(str).str[:10]))
@@ -158,7 +158,7 @@ else:
     for col, lbl in zip([h1, h2, h3, h4, h5], ["Date", "Taux EUR/GNF", "Équiv. 1 000 EUR", "Commentaire", "Enregistré le"]):
         with col:
             st.markdown(f'<div class="th">{lbl}</div>', unsafe_allow_html=True)
-    st.markdown('<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
+    st.markdown('<hr style="border:none;border-top:1.5px solid #E8E1D6;margin:.3rem 0 .5rem 0">', unsafe_allow_html=True)
 
     for i, (_, row) in enumerate(df_sort.iterrows()):
         taux_row = float(row["eur_to_gnf"])
@@ -166,12 +166,12 @@ else:
         with c1:
             st.markdown(f'<div class="row-date">{str(row["date_taux"])[:10]}</div>', unsafe_allow_html=True)
         with c2:
-            label = ' <span style="font-size:.62rem;background:#EFF6FF;color:#2563EB;padding:.1rem .35rem;border-radius:4px;font-weight:700">DERNIER</span>' if i == 0 else ""
-            st.markdown(f'<div style="font-size:.88rem;font-weight:800;color:#0F172A">{fmt_taux(taux_row)}{label}</div>', unsafe_allow_html=True)
+            label = ' <span style="font-size:.62rem;background:#FBF0E7;color:#B65C2E;padding:.1rem .35rem;border-radius:4px;font-weight:700">DERNIER</span>' if i == 0 else ""
+            st.markdown(f'<div style="font-size:.88rem;font-weight:800;color:#241F19">{fmt_taux(taux_row)}{label}</div>', unsafe_allow_html=True)
         with c3:
             st.markdown(f'<div class="row-comment">{fmt_gnf(1000 * taux_row)}</div>', unsafe_allow_html=True)
         with c4:
             st.markdown(f'<div class="row-comment">{str(row.get("commentaire",""))}</div>', unsafe_allow_html=True)
         with c5:
             st.markdown(f'<div class="row-comment">{str(row.get("created_at",""))[:16]}</div>', unsafe_allow_html=True)
-        st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.3rem 0">', unsafe_allow_html=True)
+        st.markdown('<hr style="border:none;border-top:1px solid #F5F1EA;margin:.3rem 0">', unsafe_allow_html=True)

@@ -1,7 +1,7 @@
 """Entrée de l'application — configuration globale et navigation."""
 
 import streamlit as st
-from utils.formatting import inject_css
+from utils.formatting import inject_css, sidebar_brand
 from utils.runtime import is_read_only_mode
 from utils.data_loader import is_demo_mode
 
@@ -12,6 +12,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+
+with st.sidebar:
+    st.markdown(sidebar_brand(), unsafe_allow_html=True)
 
 if is_read_only_mode():
     st.info(
@@ -40,9 +43,8 @@ _simulation    = st.Page("pages/9_Simulation_des_parts.py",         title="Simul
 
 pg = st.navigation({
     "Pilotage":           [_dashboard],
-    "Capital":            [_investisseurs, _comptes, _mouvements, _objectifs],
+    "Capital":            [_investisseurs, _comptes, _mouvements, _objectifs, _simulation],
     "Avant exploitation": [_depenses],
     "Outils":             [_taux, _historique],
-    "Simulation":         [_simulation],
 })
 pg.run()

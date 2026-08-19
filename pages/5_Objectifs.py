@@ -20,6 +20,7 @@ from utils.runtime import is_read_only_mode, read_only_notice
 inject_css()
 
 st.markdown(page_header("Objectifs", "🎯", "Suivez la progression vers les cibles de capital."), unsafe_allow_html=True)
+st.page_link("pages/1_Dashboard.py", label="← Retour au tableau de bord", icon="📊")
 
 @st.cache_data(ttl=60)
 def load():
@@ -71,7 +72,7 @@ with c3:
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Cartes objectifs ──────────────────────────────────────────────────────────
-st.markdown(section_header("Suivi des objectifs", "📊", "#2563EB"), unsafe_allow_html=True)
+st.markdown(section_header("Suivi des objectifs", "📊", "#B65C2E"), unsafe_allow_html=True)
 
 if df_prog is not None and not df_prog.empty:
     actifs = df_prog[df_prog["actif"].astype(str).str.lower() == "true"]
@@ -98,22 +99,22 @@ if df_prog is not None and not df_prog.empty:
             else:
                 jours_txt = f"{jours} jours restants"
 
-            color   = "#059669" if atteint else ("#2563EB" if pct >= 50 else "#D97706")
+            color   = "#3E7C51" if atteint else ("#B65C2E" if pct >= 50 else "#99651A")
             bar_col = "green"  if atteint else ("blue"    if pct >= 50 else "amber")
 
             _statut_color_map = {
                 "green": ("#166534", "#dcfce7"),
-                "blue":  ("#1e40af", "#dbeafe"),
+                "blue":  ("#9C4B22", "#FBF0E7"),
                 "amber": ("#92400e", "#fef3c7"),
                 "red":   ("#991b1b", "#fee2e2"),
             }
-            _sc, _sbg = _statut_color_map.get(c_stat, ("#374151", "#F3F4F6"))
+            _sc, _sbg = _statut_color_map.get(c_stat, ("#4A4238", "#F5F1EA"))
 
             # Pré-calcul du bloc effort hors f-string principale pour éviter
             # les f-strings imbriquées (Streamlit peut afficher leurs balises en texte brut)
-            _lbl_style = "font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem"
-            _val_style = "font-size:.85rem;font-weight:700;color:#7C3AED"
-            _reste_color = "#059669" if atteint else "#DC2626"
+            _lbl_style = "font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem"
+            _val_style = "font-size:.85rem;font-weight:700;color:#6B5B95"
+            _reste_color = "#3E7C51" if atteint else "#B3432F"
             if atteint:
                 _effort_html = ""
             else:
@@ -141,7 +142,7 @@ if df_prog is not None and not df_prog.empty:
                 "</div>"
                 '<div style="text-align:right;flex-shrink:0;margin-left:1rem">'
                 f'<div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>'
-                f'<div style="font-size:.72rem;color:#94A3B8;margin-top:.15rem;font-weight:500">{jours_txt}</div>'
+                f'<div style="font-size:.72rem;color:#7F7568;margin-top:.15rem;font-weight:500">{jours_txt}</div>'
                 f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
                 f'background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{statut}</span>'
                 "</div>"
@@ -149,20 +150,20 @@ if df_prog is not None and not df_prog.empty:
                 + progress_bar(pct, bar_col, "10px") +
                 '<div style="display:flex;gap:2rem;margin-top:.8rem;flex-wrap:wrap">'
                 "<div>"
-                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Capital actuel</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(capital)}</div>'
+                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Capital actuel</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(capital)}</div>'
                 "</div>"
                 "<div>"
-                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Cible</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{fmt_gnf(cible)}</div>'
+                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Cible</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(cible)}</div>'
                 "</div>"
                 "<div>"
-                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Reste</div>'
+                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Reste</div>'
                 f'<div style="font-size:.85rem;font-weight:700;color:{_reste_color}">{fmt_gnf(reste) if not atteint else "—"}</div>'
                 "</div>"
                 "<div>"
-                f'<div style="font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:.1rem">Échéance</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#0F172A">{date_c}</div>'
+                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Échéance</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{date_c}</div>'
                 "</div>"
                 + _effort_html +
                 "</div>"
@@ -175,7 +176,7 @@ if df_prog is not None and not df_prog.empty:
             with col_gauge:
                 st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
                 st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)
-                st.plotly_chart(chart_objectifs_gauge(row["nom_objectif"], pct, color), use_container_width=True, key=f"gauge_{i_obj}")
+                st.plotly_chart(chart_objectifs_gauge(row["nom_objectif"], pct, color), use_container_width=True, config={"displayModeBar": False}, key=f"gauge_{i_obj}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
@@ -201,7 +202,7 @@ with st.expander("➕  Créer un objectif", expanded=False):
             cible_gnf = st.number_input("Montant cible (GNF) *", min_value=0.0,
                                         step=1_000_000.0, format="%.0f")
         with col2:
-            date_cib  = st.date_input("Date cible *", value=date.today() + timedelta(days=365))
+            date_cib  = st.date_input("Date cible *", value=date.today() + timedelta(days=365), format="DD/MM/YYYY")
             actif     = st.checkbox("Objectif actif", value=True)
         description = st.text_area("Description", height=80)
 
@@ -236,7 +237,7 @@ if df_obj is not None and not df_obj.empty:
                     with col2:
                         try:    dc_val = pd.Timestamp(sel["date_cible"]).date()
                         except: dc_val = date.today()
-                        n_date = st.date_input("Date cible", value=dc_val)
+                        n_date = st.date_input("Date cible", value=dc_val, format="DD/MM/YYYY")
                         n_act  = st.checkbox("Actif", value=str(sel["actif"]).lower() == "true")
                     n_desc = st.text_area("Description", value=str(sel.get("description", "")), height=80)
 

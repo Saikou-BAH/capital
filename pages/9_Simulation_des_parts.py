@@ -2,12 +2,10 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
 from utils.data_loader import get_investisseurs, get_mouvements, get_comptes, get_taux
 from utils.calculs import parts_par_investisseur, get_dernier_taux
 from utils.config import (
-    COULEURS_CHART,
     OBJECTIF_DECEMBRE_MONTANT,
     OBJECTIF_DECEMBRE_NOM,
     OBJECTIF_SEPTEMBRE_MONTANT,
@@ -17,6 +15,7 @@ from utils.formatting import (
     inject_css, page_header, section_header, kpi_card,
     divider, spacer, fmt_gnf, fmt_eur, fmt_pct,
 )
+from utils.charts import chart_simulation_parts_bar, chart_simulation_parts_pie
 from utils.simulation_parts import calculer_parametres_parts
 
 inject_css()
@@ -94,7 +93,7 @@ def _net(brut_gnf: float) -> float:
 
 
 # ── Paramètres ─────────────────────────────────────────────────────────────────
-st.markdown(section_header("Paramètres de la simulation", "⚙️", "#2563EB"), unsafe_allow_html=True)
+st.markdown(section_header("Paramètres de la simulation", "⚙️", "#B65C2E"), unsafe_allow_html=True)
 
 col_p1, col_p2, col_p3 = st.columns([1.4, 2.2, 2.2])
 
@@ -109,11 +108,11 @@ with col_p1:
     objectif_nom = str(objectif_selection["nom"])
     objectif_label = str(objectif_choisi)
     st.markdown(
-        '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:.7rem 1rem">'
-        '<div style="font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;'
-        'color:#2563EB;margin-bottom:.25rem">Objectif cash sélectionné</div>'
-        f'<div style="font-size:1rem;font-weight:900;color:#0F172A">{fmt_gnf(objectif_cash_gnf)}</div>'
-        f'<div style="font-size:.7rem;color:#64748B;margin-top:.15rem">{objectif_nom}</div>'
+        '<div style="background:#FBF0E7;border:1px solid #F0D9C4;border-radius:8px;padding:.7rem 1rem">'
+        '<div style="font-size:.63rem;font-weight:650;text-transform:none;letter-spacing:0;'
+        'color:#B65C2E;margin-bottom:.25rem">Objectif cash sélectionné</div>'
+        f'<div style="font-size:1rem;font-weight:900;color:#241F19">{fmt_gnf(objectif_cash_gnf)}</div>'
+        f'<div style="font-size:.7rem;color:#6B6155;margin-top:.15rem">{objectif_nom}</div>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -158,13 +157,13 @@ valorisation_totale = parametres_parts.valorisation_totale_implicite
 valeur_1_pct = parametres_parts.valeur_1_pourcent_gnf
 
 st.markdown(
-    '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;'
-    'padding:.6rem 1rem;margin:.5rem 0;display:flex;gap:2rem;flex-wrap:wrap;font-size:.83rem;color:#0F172A">'
+    '<div style="background:#EEF5EF;border:1px solid #BFD9C4;border-radius:8px;'
+    'padding:.6rem 1rem;margin:.5rem 0;display:flex;gap:2rem;flex-wrap:wrap;font-size:.83rem;color:#241F19">'
     f'<span>🎯 Objectif <strong>{objectif_label}</strong></span>'
     f'<span>🏆 Fondateur garde <strong>{fmt_pct(pct_fondateur_garde, 0)}</strong>'
-    f' — <strong style="color:#7C3AED">{fmt_gnf(pct_fondateur_garde / 100 * valorisation_totale)}</strong></span>'
+    f' — <strong style="color:#6B5B95">{fmt_gnf(pct_fondateur_garde / 100 * valorisation_totale)}</strong></span>'
     f'<span>🤝 BAH Alseny reçoit <strong>{fmt_pct(pct_donne_alseny, 0)}</strong>'
-    f' — <strong style="color:#7C3AED">{fmt_gnf(pct_donne_alseny / 100 * valorisation_totale)}</strong></span>'
+    f' — <strong style="color:#6B5B95">{fmt_gnf(pct_donne_alseny / 100 * valorisation_totale)}</strong></span>'
     f'<span>💰 Part cash disponible <strong>{fmt_pct(part_cash_pct, 0)}</strong></span>'
     f'<span>🏭 Valorisation implicite <strong>{fmt_gnf(valorisation_totale)}</strong></span>'
     f'<span>📐 Valeur de 1 % <strong>{fmt_gnf(valeur_1_pct)}</strong></span>'
@@ -178,7 +177,7 @@ st.markdown(divider(), unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════════════════════
 
 st.markdown(
-    section_header("Investisseurs actuels — apports supplémentaires simulés", "👥", "#7C3AED"),
+    section_header("Investisseurs actuels — apports supplémentaires simulés", "👥", "#6B5B95"),
     unsafe_allow_html=True,
 )
 st.caption(
@@ -253,11 +252,11 @@ for idx, inv in enumerate(inv_list):
 
         if brut_gnf > 0:
             st.markdown(
-                '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;'
+                '<div style="background:#EEF5EF;border:1px solid #BFD9C4;border-radius:6px;'
                 'padding:.4rem .85rem;font-size:.8rem;margin-top:.2rem">'
                 f'Brut GNF : <strong>{fmt_gnf(brut_gnf)}</strong> — '
-                f'Frais 1 % : <strong style="color:#DC2626">−{fmt_gnf(frais_gnf)}</strong> — '
-                f'Net simulé : <strong style="color:#059669">{fmt_gnf(net_sim_gnf)}</strong>'
+                f'Frais 1 % : <strong style="color:#B3432F">−{fmt_gnf(frais_gnf)}</strong> — '
+                f'Net simulé : <strong style="color:#3E7C51">{fmt_gnf(net_sim_gnf)}</strong>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -281,7 +280,7 @@ st.markdown(divider(), unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════════════════════
 
 st.markdown(
-    section_header("Nouveaux associés / investisseurs simulés", "➕", "#059669"),
+    section_header("Nouveaux associés / investisseurs simulés", "➕", "#3E7C51"),
     unsafe_allow_html=True,
 )
 
@@ -295,7 +294,7 @@ saisies_nouveaux: list[dict] = []
 
 for i in range(n_new):
     st.markdown(
-        f'<div style="font-weight:700;font-size:.84rem;color:#0F172A;margin:.55rem 0 .1rem 0">'
+        f'<div style="font-weight:700;font-size:.84rem;color:#241F19;margin:.55rem 0 .1rem 0">'
         f'Personne {i + 1}</div>',
         unsafe_allow_html=True,
     )
@@ -329,11 +328,11 @@ for i in range(n_new):
 
     if n_brut_gnf > 0:
         st.markdown(
-            '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;'
+            '<div style="background:#EEF5EF;border:1px solid #BFD9C4;border-radius:6px;'
             'padding:.35rem .8rem;font-size:.78rem;margin-bottom:.35rem">'
             f'Brut GNF : <strong>{fmt_gnf(n_brut_gnf)}</strong> — '
-            f'Frais 1 % : <strong style="color:#DC2626">−{fmt_gnf(n_frais_gnf)}</strong> — '
-            f'Net : <strong style="color:#059669">{fmt_gnf(n_net_gnf)}</strong>'
+            f'Frais 1 % : <strong style="color:#B3432F">−{fmt_gnf(n_frais_gnf)}</strong> — '
+            f'Net : <strong style="color:#3E7C51">{fmt_gnf(n_net_gnf)}</strong>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -436,7 +435,7 @@ if cash_restant > 0:
 df_sim = pd.DataFrame(lignes)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
-st.markdown(section_header("Indicateurs clés", "📊", "#0F172A"), unsafe_allow_html=True)
+st.markdown(section_header("Indicateurs clés", "📊", "#241F19"), unsafe_allow_html=True)
 
 k0, k1, k2, k3 = st.columns(4)
 with k0:
@@ -474,12 +473,12 @@ with k9:
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Tableau principal ──────────────────────────────────────────────────────────
-st.markdown(section_header("Répartition simulée", "📋", "#2563EB"), unsafe_allow_html=True)
+st.markdown(section_header("Répartition simulée", "📋", "#B65C2E"), unsafe_allow_html=True)
 
 if not df_sim.empty:
     _LBL = (
-        "font-size:.63rem;font-weight:800;text-transform:uppercase;"
-        "letter-spacing:.07em;color:#94A3B8"
+        "font-size:.63rem;font-weight:650;text-transform:none;"
+        "letter-spacing:0;color:#7F7568"
     )
     _RATIOS = [2, 1.5, 2, 2, 1.4, 2, 2, 1.2, 1.4, 1.5, 2.2, 1.8, 2.5]
     _HEADERS = [
@@ -489,55 +488,59 @@ if not df_sim.empty:
         "Valeur GNF", "Équiv. EUR", "Notes",
     ]
 
+    st.markdown('<div class="table-scroll"><div style="min-width:1020px">', unsafe_allow_html=True)
+
     hdr_cols = st.columns(_RATIOS)
     for col, h in zip(hdr_cols, _HEADERS):
         with col:
             st.markdown(f'<div style="{_LBL}">{h}</div>', unsafe_allow_html=True)
     st.markdown(
-        '<hr style="border:none;border-top:1.5px solid #E2E8F0;margin:.25rem 0">',
+        '<hr style="border:none;border-top:1.5px solid #E8E1D6;margin:.25rem 0">',
         unsafe_allow_html=True,
     )
 
     for _, row in df_sim.iterrows():
         is_restant = row["Personne"] == "Cash restant à apporter"
         pct_f = float(row["% final"])
-        pct_col = "#059669" if pct_f >= 20 else ("#2563EB" if pct_f >= 5 else "#D97706")
+        pct_col = "#3E7C51" if pct_f >= 20 else ("#B65C2E" if pct_f >= 5 else "#99651A")
 
         r_cols = st.columns(_RATIOS)
         _vals = [
-            f'<div style="font-size:.82rem;font-weight:700;color:#0F172A">{row["Personne"]}</div>',
-            f'<div style="font-size:.74rem;color:#64748B">{row["Rôle"]}</div>',
-            (f'<div style="font-size:.78rem;font-weight:600;color:#0F172A">{fmt_gnf(row["Apport réel net GNF"])}</div>'
+            f'<div style="font-size:.82rem;font-weight:700;color:#241F19">{row["Personne"]}</div>',
+            f'<div style="font-size:.74rem;color:#6B6155">{row["Rôle"]}</div>',
+            (f'<div style="font-size:.78rem;font-weight:600;color:#241F19">{fmt_gnf(row["Apport réel net GNF"])}</div>'
              if row["Apport réel net GNF"] > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
-            (f'<div style="font-size:.78rem;color:#0F172A">{fmt_gnf(row["Apport sim. brut GNF"])}</div>'
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
+            (f'<div style="font-size:.78rem;color:#241F19">{fmt_gnf(row["Apport sim. brut GNF"])}</div>'
              if row["Apport sim. brut GNF"] > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
-            (f'<div style="font-size:.78rem;color:#DC2626">−{fmt_gnf(row["Frais 1 %"])}</div>'
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
+            (f'<div style="font-size:.78rem;color:#B3432F">−{fmt_gnf(row["Frais 1 %"])}</div>'
              if row["Frais 1 %"] > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
-            (f'<div style="font-size:.78rem;font-weight:600;color:#059669">{fmt_gnf(row["Apport sim. net GNF"])}</div>'
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
+            (f'<div style="font-size:.78rem;font-weight:600;color:#3E7C51">{fmt_gnf(row["Apport sim. net GNF"])}</div>'
              if row["Apport sim. net GNF"] > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
-            f'<div style="font-size:.84rem;font-weight:800;color:#0F172A">{fmt_gnf(row["Apport total net GNF"])}</div>',
-            f'<div style="font-size:.82rem;font-weight:700;color:#2563EB">{fmt_pct(row["% cash"])}</div>',
-            (f'<div style="font-size:.82rem;font-weight:700;color:#7C3AED">{fmt_pct(float(row["% réservé / bonus"]))}</div>'
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
+            f'<div style="font-size:.84rem;font-weight:800;color:#241F19">{fmt_gnf(row["Apport total net GNF"])}</div>',
+            f'<div style="font-size:.82rem;font-weight:700;color:#B65C2E">{fmt_pct(row["% cash"])}</div>',
+            (f'<div style="font-size:.82rem;font-weight:700;color:#6B5B95">{fmt_pct(float(row["% réservé / bonus"]))}</div>'
              if float(row["% réservé / bonus"]) > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
             f'<div style="font-size:.92rem;font-weight:900;color:{pct_col}">{fmt_pct(row["% final"])}</div>',
-            f'<div style="font-size:.78rem;font-weight:700;color:#0F172A">{fmt_gnf(row["Valeur implicite GNF"])}</div>',
-            (f'<div style="font-size:.78rem;color:#64748B">{fmt_eur(row["Équivalent EUR"])}</div>'
+            f'<div style="font-size:.78rem;font-weight:700;color:#241F19">{fmt_gnf(row["Valeur implicite GNF"])}</div>',
+            (f'<div style="font-size:.78rem;color:#6B6155">{fmt_eur(row["Équivalent EUR"])}</div>'
              if taux_sim > 0
-             else '<div style="font-size:.78rem;color:#CBD5E1">—</div>'),
-            f'<div style="font-size:.72rem;color:#94A3B8">{str(row["Notes"])[:50]}</div>',
+             else '<div style="font-size:.78rem;color:#E8E1D6">—</div>'),
+            f'<div style="font-size:.72rem;color:#7F7568">{str(row["Notes"])[:50]}</div>',
         ]
         for col, v in zip(r_cols, _vals):
             with col:
                 st.markdown(v, unsafe_allow_html=True)
         st.markdown(
-            '<hr style="border:none;border-top:1px solid #F1F5F9;margin:.15rem 0">',
+            '<hr style="border:none;border-top:1px solid #F5F1EA;margin:.15rem 0">',
             unsafe_allow_html=True,
         )
+
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
     # Message si objectif cash atteint / dépassé
     if cash_restant <= 0:
@@ -557,7 +560,7 @@ if not df_sim.empty:
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Bloc de contrôle ───────────────────────────────────────────────────────────
-st.markdown(section_header("Contrôle des totaux", "✅", "#059669"), unsafe_allow_html=True)
+st.markdown(section_header("Contrôle des totaux", "✅", "#3E7C51"), unsafe_allow_html=True)
 
 df_att = df_sim[df_sim["Personne"] != "Cash restant à apporter"].copy() if not df_sim.empty else pd.DataFrame()
 total_pct_cash_att  = float(df_att["% cash"].sum())  if not df_att.empty else 0.0
@@ -590,52 +593,19 @@ else:
 st.markdown(divider(), unsafe_allow_html=True)
 
 # ── Graphiques ─────────────────────────────────────────────────────────────────
-st.markdown(section_header("Visualisation", "📈", "#2563EB"), unsafe_allow_html=True)
+st.markdown(section_header("Visualisation", "📈", "#B65C2E"), unsafe_allow_html=True)
 
 if not df_sim.empty and df_sim["% final"].sum() > 0:
     g1, g2 = st.columns(2)
 
     with g1:
         st.markdown('<div class="card" style="padding:.75rem 1rem .5rem">', unsafe_allow_html=True)
-        fig_bar = px.bar(
-            df_sim,
-            x="Personne",
-            y="% final",
-            color="Personne",
-            color_discrete_sequence=COULEURS_CHART,
-            title="Parts finales par personne (%)",
-            labels={"% final": "% de la ferme", "Personne": ""},
-            text=df_sim["% final"].apply(lambda v: fmt_pct(v)),
-        )
-        fig_bar.update_traces(textposition="outside")
-        fig_bar.update_layout(
-            showlegend=False,
-            margin=dict(t=45, b=10, l=5, r=5),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            yaxis_title="% de la ferme",
-        )
-        st.plotly_chart(fig_bar, use_container_width=True, key="sim_bar_parts")
+        st.plotly_chart(chart_simulation_parts_bar(df_sim), use_container_width=True, config={"displayModeBar": False}, key="sim_bar_parts")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with g2:
         st.markdown('<div class="card" style="padding:.75rem 1rem .5rem">', unsafe_allow_html=True)
-        fig_pie = px.pie(
-            df_sim,
-            names="Personne",
-            values="% final",
-            color_discrete_sequence=COULEURS_CHART,
-            title="Répartition finale (camembert)",
-            hole=0.38,
-        )
-        fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-        fig_pie.update_layout(
-            showlegend=False,
-            margin=dict(t=45, b=10, l=5, r=5),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(fig_pie, use_container_width=True, key="sim_pie_parts")
+        st.plotly_chart(chart_simulation_parts_pie(df_sim), use_container_width=True, config={"displayModeBar": False}, key="sim_pie_parts")
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("Aucune donnée suffisante pour les graphiques.")
