@@ -501,6 +501,7 @@ hr {
     font-size: .72rem; font-weight: 600;
     letter-spacing: 0; text-transform: none;
     white-space: nowrap;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* ── Table ── */
@@ -673,8 +674,13 @@ button[kind="secondary"]:hover {
     box-shadow: var(--lf-shadow-sm);
 }
 
-/* Column gap */
-[data-testid="column"] { gap: 0 !important; }
+/* Column gap — et surtout : par défaut, un enfant flex refuse de rétrécir
+   sous la largeur intrinsèque de son contenu (min-width:auto). Sur les
+   tableaux à nombreuses colonnes (Historique…), ça fait déborder badges et
+   texte dans la colonne voisine dès que la fenêtre est moyennement étroite,
+   au lieu de tronquer proprement. min-width:0 corrige ce comportement
+   partout où des st.columns() sont utilisées. */
+[data-testid="column"] { gap: 0 !important; min-width: 0 !important; }
 
 /* Plotly chart container */
 .stPlotlyChart > div {
@@ -1095,18 +1101,22 @@ def cat_card(
     )
     pct_c = max(0.0, min(100.0, pct))
     return (
-        f'<div class="card" style="padding:.9rem 1.1rem;margin-bottom:.5rem">'
-        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">'
-        f'  <div style="display:flex;align-items:center;gap:.55rem">'
-        f'    <div style="font-size:1.3rem;line-height:1">{icon}</div>'
-        f'    <div>'
-        f'      <div style="font-size:.88rem;font-weight:650;color:var(--lf-text);line-height:1.2">{name}</div>'
-        f'      <div style="font-size:.7rem;color:var(--lf-text-muted);margin-top:.1rem;max-width:200px;line-height:1.35">{description[:55]}</div>'
+        f'<div class="card" style="padding:.9rem 1.1rem;margin-bottom:.5rem;overflow:hidden">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;'
+        f'flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem">'
+        f'  <div style="display:flex;align-items:center;gap:.55rem;min-width:0;flex:1 1 120px">'
+        f'    <div style="font-size:1.3rem;line-height:1;flex-shrink:0">{icon}</div>'
+        f'    <div style="min-width:0">'
+        f'      <div style="font-size:.88rem;font-weight:650;color:var(--lf-text);line-height:1.2;'
+        f'overflow-wrap:break-word">{name}</div>'
+        f'      <div style="font-size:.7rem;color:var(--lf-text-muted);margin-top:.1rem;line-height:1.35;'
+        f'overflow-wrap:break-word">{description[:55]}</div>'
         f'    </div>'
         f'  </div>'
-        f'  <div style="text-align:right;flex-shrink:0;margin-left:.75rem">'
-        f'    <div style="font-size:.9rem;font-weight:700;color:var(--lf-text);font-variant-numeric:tabular-nums">{montant}</div>'
-        f'    <div style="font-size:.68rem;color:var(--lf-text-muted)">{nb} dépense{"s" if nb != 1 else ""}</div>'
+        f'  <div style="text-align:right;flex-shrink:0">'
+        f'    <div style="font-size:.9rem;font-weight:700;color:var(--lf-text);font-variant-numeric:tabular-nums;'
+        f'white-space:nowrap">{montant}</div>'
+        f'    <div style="font-size:.68rem;color:var(--lf-text-muted);white-space:nowrap">{nb} dépense{"s" if nb != 1 else ""}</div>'
         f'  </div>'
         f'</div>'
         f'<div style="background:var(--lf-surface-subtle);border-radius:999px;height:5px;overflow:hidden;margin-bottom:.35rem">'
