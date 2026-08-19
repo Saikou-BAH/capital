@@ -749,6 +749,84 @@ def soldes_par_compte(df_mvt: pd.DataFrame, df_comptes: pd.DataFrame) -> pd.Data
     return comptes
 
 
+def repartition_investisseurs_par_compte(
+    df_mvt: pd.DataFrame,
+    df_comptes: pd.DataFrame,
+    df_inv: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Pour chaque compte, répartit le solde natif (EUR ou GNF) par investisseur
+    d'après les mouvements qui lui sont rattachés (crédits - débits), en
+    reprenant la même logique de valorisation que soldes_par_compte().
+
+    Retourne un DataFrame avec colonnes :
+      compte_id, compte_nom, devise, investisseur_id, investisseur_nom, montant, pct
+    """
+    cols = ["compte_id", "compte_nom", "devise", "investisseur_id", "investisseur_nom", "montant", "pct"]
+    if df_comptes is None or df_comptes.empty or df_mvt is None or df_mvt.empty:
+        return pd.DataFrame(columns=cols)
+
+    df = df_mvt.copy()
+    df["montant_origine"] = pd.to_numeric(df["montant_origine"], errors="coerce").fillna(0)
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0)
+    df["investisseur_id"] = df["investisseur_id"].fillna("").astype(str)
+
+    noms_inv = {}
+    if df_inv is not None and not df_inv.empty:
+        noms_inv = df_inv.set_index("id")["nom"].to_dict()
+
+    rows = []
+    for _, cpt in df_comptes.iterrows():
+        cid = cpt["id"]
+        devise = str(cpt["devise"]).upper()
+
+        if devise == "EUR":
+            df_credit = df[
+                (df["compte_destination_id"] == cid)
+                & df["type_mouvement"].isin(["apport", "transfert"])
+                & (df["devise_origine"].astype(str).str.upper() == "EUR")
+            ]
+            credits = df_credit.groupby("investisseur_id")["montant_origine"].sum()
+            df_debit = df[
+                (df["compte_source_id"] == cid)
+                & df["type_mouvement"].isin(["retrait", "depense", "transfert"])
+                & (df["devise_origine"].astype(str).str.upper() == "EUR")
+            ]
+            debits = df_debit.groupby("investisseur_id")["montant_origine"].sum()
+        else:
+            df_credit = df[(df["compte_destination_id"] == cid) & df["type_mouvement"].isin(["apport", "transfert"])].copy()
+            df_credit["_montant"] = df_credit.apply(
+                lambda row: float(row["montant_converti_gnf"]) if str(row["devise_origine"]).upper() == "EUR" else float(row["montant_origine"]),
+                axis=1,
+            )
+            credits = df_credit.groupby("investisseur_id")["_montant"].sum()
+
+            df_debit = df[(df["compte_source_id"] == cid) & df["type_mouvement"].isin(["retrait", "depense", "transfert", "frais_retrait"])].copy()
+            df_debit["_montant"] = df_debit.apply(
+                lambda row: float(row["montant_origine"]) if str(row["devise_origine"]).upper() == "GNF" else float(row["montant_converti_gnf"]),
+                axis=1,
+            )
+            debits = df_debit.groupby("investisseur_id")["_montant"].sum()
+
+        net = credits.sub(debits, fill_value=0)
+        net = net[net.abs() > 0.01]
+        total = net.sum()
+
+        for inv_id, montant in net.sort_values(ascending=False).items():
+            pct = (montant / total * 100) if total else 0.0
+            rows.append({
+                "compte_id": cid,
+                "compte_nom": cpt["nom"],
+                "devise": devise,
+                "investisseur_id": inv_id,
+                "investisseur_nom": noms_inv.get(inv_id, inv_id) if inv_id else "Non attribué",
+                "montant": montant,
+                "pct": pct,
+            })
+
+    return pd.DataFrame(rows, columns=cols)
+
+
 # ── Progression objectifs ─────────────────────────────────────────────────────
 
 def progression_objectifs(

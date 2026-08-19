@@ -20,3 +20,11 @@ mvt-6ba128a7;2026-05-04;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;8472000
 mvt-daec959f;2026-05-04;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;84720;GNF;1;84720;Frais de retrait 1% — Orange Marchand;True;mvt-019f3c58;2026-05-22 21:25
 mvt-789db2fc;2026-05-26;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;1500000.0;GNF;1;1500000;C'est en trasnfert en orange money et orange marchand.;False;mvt-019f3c58;2026-06-03 22:26
 mvt-165c6104;2026-05-26;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;15000;GNF;1;15000;Frais de retrait 1% — Orange Marchand;True;mvt-019f3c58;2026-06-03 22:26
+mvt-09799ff3;2026-06-01;apport;inv-437fd569;;cpt-2a19f2ae;60.0;EUR;10500.0;630000;C'est l'apport de juin pour abdoulaye.;True;;2026-06-12 17:40
+mvt-8cc9a714;2026-06-02;apport;inv-a96f71b3;;cpt-2a19f2ae;2000.0;EUR;10500.0;21000000;C'est l'apport de Noune pour le mois de janvier.;True;;2026-06-12 17:52
+mvt-00b03dad;2026-07-01;apport;inv-437fd569;;cpt-2a19f2ae;250.0;EUR;10600.0;2650000;C'est l'apport de juillet;True;;2026-07-27 17:58
+mvt-f6c4c910;2026-08-01;apport;inv-a96f71b3;;cpt-2a19f2ae;2000.0;EUR;10600.0;21200000;C'est mon apport d'aout.;True;;2026-08-03 14:08
+mvt-c05f6ce1;2026-08-01;apport;inv-437fd569;;cpt-2a19f2ae;250.0;EUR;10600.0;2650000;C'est son apport d'aout.;True;;2026-08-03 14:08
+mvt-89857747;2026-08-19;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;1000000;GNF;1;1000000;Transfert interne GNF — Orange Money vers Orange Marchand;True;;2026-08-19 15:13
+mvt-3d7731f0;2026-08-19;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;10000;GNF;1;10000;Frais de retrait 1% — Orange Marchand;True;;2026-08-19 15:13
+mvt-518a7bce;2026-08-19;transfert;inv-a96f71b3;cpt-0875c45a;cpt-6d5696f6;9411446;GNF;1;9411446;Retrait en espèces depuis Orange Money;True;;2026-08-19 15:22

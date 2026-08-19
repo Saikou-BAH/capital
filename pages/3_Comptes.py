@@ -9,13 +9,13 @@ from utils.config import TYPES_COMPTE, PAYS_DISPONIBLES, DEVISES
 from utils.data_loader import get_comptes, get_investisseurs, get_mouvements, add_compte, update_compte
 from utils.calculs import (
     soldes_par_compte, calculer_capital_breakdown, valeurs_par_compte,
-    repartition_par_devise,
+    repartition_par_devise, repartition_investisseurs_par_compte,
 )
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state,
     fmt_gnf, fmt_eur, fmt_taux, badge_mouvement, divider, spacer,
 )
-from utils.charts import chart_valeurs_par_compte, chart_repartition_devise
+from utils.charts import chart_valeurs_par_compte, chart_repartition_devise, chart_evolution_soldes_comptes
 from utils.runtime import is_read_only_mode, read_only_notice
 
 inject_css()
@@ -30,6 +30,7 @@ df_cpt, df_inv, df_mvt = load()
 df_soldes = soldes_par_compte(df_mvt, df_cpt)
 df_valeurs = valeurs_par_compte(df_mvt, df_cpt)
 df_devise = repartition_par_devise(df_mvt, df_cpt)
+df_repart_inv = repartition_investisseurs_par_compte(df_mvt, df_cpt, df_inv)
 capital_breakdown = calculer_capital_breakdown(df_mvt, df_cpt)
 total_valorise_gnf = capital_breakdown["capital_total"]
 READ_ONLY = is_read_only_mode()
@@ -64,6 +65,11 @@ with g2:
     st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
     st.plotly_chart(chart_repartition_devise(df_devise), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+st.markdown('<div class="card" style="padding:.75rem 1rem .5rem 1rem">', unsafe_allow_html=True)
+st.plotly_chart(chart_evolution_soldes_comptes(df_mvt, df_cpt), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
 
@@ -154,6 +160,20 @@ else:
             st.markdown(f'<div class="row-comment" style="padding-top:.2rem">{proprio}</div>', unsafe_allow_html=True)
         with c5:
             st.markdown(f'<div class="row-comment" style="padding-top:.2rem">{str(row.get("description",""))[:55]}</div>', unsafe_allow_html=True)
+
+        df_rep_cpt = df_repart_inv[df_repart_inv["compte_id"] == row["id"]] if not df_repart_inv.empty else pd.DataFrame()
+        if not df_rep_cpt.empty:
+            fmt_montant = fmt_eur if dev == "EUR" else fmt_gnf
+            badges = "".join(
+                f'<span style="background:#F1F5F9;color:#334155;font-size:.68rem;font-weight:600;'
+                f'padding:.15rem .5rem;border-radius:999px;white-space:nowrap">'
+                f'👤 {r["investisseur_nom"]} — {fmt_montant(r["montant"])} ({r["pct"]:.0f}%)</span>'
+                for _, r in df_rep_cpt.iterrows()
+            )
+            st.markdown(
+                f'<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:.25rem 0 0 0">{badges}</div>',
+                unsafe_allow_html=True,
+            )
         st.markdown('<hr style="border:none;border-top:1px solid #F8FAFC;margin:.3rem 0">', unsafe_allow_html=True)
 
     def _render_section(df_sec, title, color):
