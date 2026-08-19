@@ -28,3 +28,6 @@ mvt-c05f6ce1;2026-08-01;apport;inv-437fd569;;cpt-2a19f2ae;250.0;EUR;10600.0;2650
 mvt-89857747;2026-08-19;transfert;inv-a96f71b3;cpt-0875c45a;cpt-cd5043e5;1000000;GNF;1;1000000;Transfert interne GNF — Orange Money vers Orange Marchand;True;;2026-08-19 15:13
 mvt-3d7731f0;2026-08-19;frais_retrait;inv-a96f71b3;cpt-cd5043e5;;10000;GNF;1;10000;Frais de retrait 1% — Orange Marchand;True;;2026-08-19 15:13
 mvt-518a7bce;2026-08-19;transfert;inv-a96f71b3;cpt-0875c45a;cpt-6d5696f6;9411446;GNF;1;9411446;Retrait en espèces depuis Orange Money;True;;2026-08-19 15:22
+mvt-a2b7f1ca;2026-08-19;depense;inv-a96f71b3;cpt-6d5696f6;;500000;GNF;1;500000;Dépense avant exploitation — Formation gestionnaire;True;dep-9fa4aa19;2026-08-19 16:14
+mvt-b3d6a6f0;2026-08-19;depense;inv-a96f71b3;cpt-6d5696f6;;500000;GNF;1;500000;Dépense avant exploitation — Salaire gestionnaire;True;dep-45712cf7;2026-08-19 16:14
+mvt-b340c1b5;2026-08-19;transfert;inv-a96f71b3;cpt-0875c45a;cpt-6d5696f6;1000000;GNF;1;1000000;Transfert interne GNF — Orange Money vers Espèces;True;;2026-08-19 16:15
