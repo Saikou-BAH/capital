@@ -11,14 +11,14 @@ from utils.config import (
 )
 from utils.data_loader import (
     get_investisseurs, get_comptes, get_mouvements,
-    get_objectifs, get_taux, get_depenses, is_demo_mode,
+    get_objectifs, get_depenses, is_demo_mode,
 )
 from utils.calculs import (
     calculer_capital_total, calculer_capital_breakdown, calculer_bilan_capital,
     parts_par_investisseur, valeurs_par_compte,
     repartition_par_pays, repartition_par_devise,
     evolution_capital, evolution_apports_par_investisseur,
-    progression_objectifs, get_dernier_taux,
+    progression_objectifs,
 )
 from utils.formatting import (
     inject_css, kpi_card, hero_banner, section_header, page_header,
@@ -42,15 +42,14 @@ inject_css()
 def _load():
     return (
         get_investisseurs(), get_comptes(), get_mouvements(),
-        get_objectifs(), get_taux(), get_depenses(),
+        get_objectifs(), get_depenses(),
     )
 
-df_inv, df_cpt, df_mvt, df_obj, df_taux, df_dep = _load()
+df_inv, df_cpt, df_mvt, df_obj, df_dep = _load()
 
 # ── Calculs ───────────────────────────────────────────────────────────────────
 capital_total     = calculer_capital_total(df_mvt, df_cpt)
 pct_global        = capital_total / CAPITAL_CIBLE_GNF * 100
-dernier_taux      = get_dernier_taux(df_taux)
 df_parts          = parts_par_investisseur(df_mvt, df_inv)
 df_pays           = repartition_par_pays(df_mvt, df_cpt)
 df_devise         = repartition_par_devise(df_mvt, df_cpt)
@@ -114,7 +113,7 @@ col_hero, col_side = st.columns([3, 1])
 
 with col_hero:
     st.markdown(
-        hero_banner(capital_total, pct_global, dernier_taux, nb_inv, nb_mvt),
+        hero_banner(capital_total, pct_global, nb_inv, nb_mvt),
         unsafe_allow_html=True,
     )
 
@@ -140,8 +139,7 @@ with col_side:
 
     today_str = date.today().strftime("%d %b %Y")
     st.markdown(
-        kpi_card("Aujourd'hui", today_str,
-                 sub=f"Taux : {fmt_taux(dernier_taux)}", color="slate", icon="🗓️"),
+        kpi_card("Aujourd'hui", today_str, color="slate", icon="🗓️"),
         unsafe_allow_html=True,
     )
 
@@ -185,7 +183,6 @@ st.markdown(
         ("Capital actuel",       fmt_gnf(capital_total),       "blue"),
         ("Reste à compléter",    fmt_gnf(reste_a_completer),   "red"),
         ("Progression",          fmt_pct(pct_global),          "green"),
-        ("Dernier taux EUR/GNF", fmt_taux(dernier_taux),       "amber"),
         ("Frais de retrait",     fmt_gnf(total_frais),         "violet"),
     ]),
     unsafe_allow_html=True,
@@ -221,7 +218,7 @@ with _b4:
 with _b5:
     st.markdown(kpi_card(
         "Liquidités après travaux", fmt_gnf(bilan["capital_liquide_apres_depenses"]),
-        sub="Capital comptes − dépenses payées", color="green", icon="✅",
+        sub="Capital comptes − dépenses en attente", color="green", icon="✅",
     ), unsafe_allow_html=True)
 
 st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
@@ -231,8 +228,9 @@ st.markdown(
     f'ℹ️ <strong>Lecture du bilan</strong> — Le <em>capital brut apporté</em> est la somme brute de tous '
     f'les apports valorisés en GNF. Le <em>capital en comptes</em> utilise la simulation FIFO '
     f'(taux réels de transfert) et peut différer du brut si des écarts de taux ont eu lieu. '
-    f'Les <em>dépenses construction</em> sont une vue de pilotage : elles ne sont pas encore '
-    f'déduites de la logique officielle du capital tant qu\'elles ne sont pas reliées aux mouvements.'
+    f'Chaque <em>dépense construction</em> payée crée un mouvement réel qui réduit déjà le '
+    f'compte utilisé — elle est donc déjà comptée dans le capital en comptes. Les '
+    f'<em>liquidités après travaux</em> ne déduisent que les dépenses encore en attente.'
     f'</div>',
     unsafe_allow_html=True,
 )

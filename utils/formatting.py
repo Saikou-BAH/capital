@@ -726,13 +726,11 @@ def page_header(title: str, icon: str = "", description: str = "", badge: str = 
 def hero_banner(
     capital_gnf: float,
     pct_global: float,
-    dernier_taux: float,
     nb_investisseurs: int,
     nb_mouvements: int,
 ) -> str:
     gnf_str  = fmt_gnf(capital_gnf)
     pct_str  = fmt_pct(pct_global)
-    taux_str = fmt_taux(dernier_taux)
     return (
         f'<div class="hero">'
         f'  <div class="hero-chip">🌱 {PROJECT_NAME}</div>'
@@ -745,10 +743,6 @@ def hero_banner(
         f'    <div class="hero-meta-item">'
         f'      <div class="hero-meta-lbl">Progression</div>'
         f'      <div class="hero-meta-val">{pct_str}</div>'
-        f'    </div>'
-        f'    <div class="hero-meta-item">'
-        f'      <div class="hero-meta-lbl">Taux EUR / GNF</div>'
-        f'      <div class="hero-meta-val">{taux_str}</div>'
         f'    </div>'
         f'    <div class="hero-meta-item">'
         f'      <div class="hero-meta-lbl">Investisseurs</div>'

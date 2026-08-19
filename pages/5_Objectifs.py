@@ -89,6 +89,7 @@ if df_prog is not None and not df_prog.empty:
             c_stat  = effort["couleur_statut"]
             e_mens  = effort["effort_mensuel"]
             e_hebo  = effort["effort_hebdomadaire"]
+            e_jour  = effort["effort_journalier"]
 
             if atteint:
                 jours_txt = "✅ Atteint avant l'échéance !"
@@ -124,6 +125,10 @@ if df_prog is not None and not df_prog.empty:
                     "<div>"
                     f"<div style='{_lbl_style}'>Effort / semaine</div>"
                     f"<div style='{_val_style}'>{fmt_gnf_court(e_hebo, dernier_taux)}</div>"
+                    "</div>"
+                    "<div>"
+                    f"<div style='{_lbl_style}'>Effort / jour</div>"
+                    f"<div style='{_val_style}'>{fmt_gnf_court(e_jour, dernier_taux)}</div>"
                     "</div>"
                 )
 

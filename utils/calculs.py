@@ -884,14 +884,17 @@ def calculer_effort_objectif(
             "progress_pct": progress_pct,
             "effort_mensuel": 0.0,
             "effort_hebdomadaire": 0.0,
+            "effort_journalier": 0.0,
             "statut": "Atteint ✅",
             "couleur_statut": "green",
         }
 
     mois_restants = max(jours_restants / 30.0, 0.01)
     semaines_restantes = max(jours_restants / 7.0, 0.01)
+    jours_pour_calcul = max(jours_restants, 0.01)
     effort_mensuel = reste_gnf / mois_restants if mois_restants > 0 else 0.0
     effort_hebdomadaire = reste_gnf / semaines_restantes if semaines_restantes > 0 else 0.0
+    effort_journalier = reste_gnf / jours_pour_calcul
 
     # Statut basé sur progression % et jours restants
     if progress_pct >= 70:
@@ -913,6 +916,7 @@ def calculer_effort_objectif(
         "progress_pct": round(progress_pct, 2),
         "effort_mensuel": round(effort_mensuel),
         "effort_hebdomadaire": round(effort_hebdomadaire),
+        "effort_journalier": round(effort_journalier),
         "statut": statut,
         "couleur_statut": couleur,
     }
@@ -929,17 +933,23 @@ def calculer_bilan_capital(
     Bilan consolidé du capital pour le Dashboard.
 
     Le capital_total_valorise est calculé via calculer_capital_total() (simulation
-    FIFO avec écarts de taux réels/estimatifs). Les dépenses construction sont
-    présentées en vue de pilotage, sans modifier la logique officielle du capital.
+    FIFO avec écarts de taux réels/estimatifs). Chaque dépense au statut "Payé"
+    crée un mouvement réel (type "depense") qui réduit déjà le solde du compte
+    utilisé — donc les dépenses payées sont déjà comptées dans
+    capital_total_valorise. Seules les dépenses encore "en attente" (pas
+    encore réellement décaissées) doivent être projetées en plus.
 
     Retourne :
-      - capital_total_valorise         : valeur officielle (= calculer_capital_total)
+      - capital_total_valorise         : valeur officielle (= calculer_capital_total),
+                                          déjà nette des dépenses payées
       - capital_brut_apporte           : Σ apports (montant_converti_gnf)
       - total_frais                    : Σ frais_retrait (montant_converti_gnf)
       - depenses_construction_payees   : Σ dépenses avec statut "Payé"
       - depenses_construction_total    : Σ toutes dépenses (tous statuts)
       - depenses_construction_attente  : Σ dépenses non encore payées
-      - capital_liquide_apres_depenses : capital_total_valorise - depenses_construction_payees
+      - capital_liquide_apres_depenses : capital_total_valorise - depenses_construction_attente
+                                          (liquidités projetées une fois les dépenses en
+                                          attente réellement décaissées)
     """
     capital_total_valorise = calculer_capital_total(df_mvt, df_cpt)
 
@@ -977,7 +987,7 @@ def calculer_bilan_capital(
         "depenses_construction_payees": dep_payees,
         "depenses_construction_total": dep_total,
         "depenses_construction_attente": dep_attente,
-        "capital_liquide_apres_depenses": max(0.0, capital_total_valorise - dep_payees),
+        "capital_liquide_apres_depenses": max(0.0, capital_total_valorise - dep_attente),
     }
 
 
