@@ -4,6 +4,7 @@ Style inspiré de Legend Farm : propre, aéré, cartes soignées, premium.
 Adapté à un usage financier / suivi de capital : sobre, rassurant, SaaS.
 """
 
+import pandas as pd
 import streamlit as st
 from utils.config import COULEUR_BADGE_MOUVEMENT, EMOJI_MOUVEMENT, LABELS_MOUVEMENT, PROJECT_NAME
 
@@ -51,6 +52,19 @@ def fmt_montant(montant: float, devise: str) -> str:
 def fmt_pct(valeur: float, decimales: int = 1) -> str:
     try:
         return f"{valeur:.{decimales}f} %"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def fmt_date_fr(valeur) -> str:
+    """Formate une date (str ISO, date, Timestamp) au format français DD/MM/YYYY."""
+    if valeur is None or valeur == "":
+        return "—"
+    try:
+        ts = pd.Timestamp(valeur)
+        if pd.isna(ts):
+            return "—"
+        return ts.strftime("%d/%m/%Y")
     except (TypeError, ValueError):
         return "—"
 

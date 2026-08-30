@@ -24,6 +24,8 @@ if _BACKEND == "sheets":
         get_mouvements, add_mouvement, delete_mouvement,
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
+        get_planification_mois, set_planification_mois,
+        get_plan_apports, add_plan_apport, update_plan_apport, delete_plan_apport,
         get_depenses, add_depense, update_depense, delete_depense,
         get_depenses_repartition, add_depense_repartition,
         delete_depense_repartition_by_depense,
@@ -37,6 +39,8 @@ else:
         get_mouvements, add_mouvement, delete_mouvement,
         get_objectifs, add_objectif, update_objectif,
         get_taux, add_taux,
+        get_planification_mois, set_planification_mois,
+        get_plan_apports, add_plan_apport, update_plan_apport, delete_plan_apport,
         get_depenses, add_depense, update_depense, delete_depense,
         get_depenses_repartition, add_depense_repartition,
         delete_depense_repartition_by_depense,
@@ -64,3 +68,7 @@ if is_read_only_mode():
     add_objectif = _blocked_write
     update_objectif = _blocked_write
     add_taux = _blocked_write
+    set_planification_mois = _blocked_write
+    add_plan_apport = _blocked_write
+    update_plan_apport = _blocked_write
+    delete_plan_apport = _blocked_write

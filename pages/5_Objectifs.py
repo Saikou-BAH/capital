@@ -4,15 +4,24 @@ import streamlit as st
 import pandas as pd
 from datetime import date, timedelta
 
-from utils.data_loader import get_objectifs, get_mouvements, get_comptes, get_taux, add_objectif, update_objectif
+from utils.data_loader import (
+    get_objectifs, get_mouvements, get_comptes, add_objectif, update_objectif,
+    get_plan_apports, add_plan_apport, update_plan_apport, delete_plan_apport,
+)
 from utils.config import (
     OBJECTIF_SEPTEMBRE_ID, OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
     OBJECTIF_DECEMBRE_ID, OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
+    PALIERS_CAPITAL,
 )
-from utils.calculs import calculer_capital_total, progression_objectifs, calculer_effort_objectif, get_dernier_taux
+from utils.calculs import (
+    calculer_capital_total, progression_objectifs,
+    calculer_palier, apport_moyen_mensuel, date_atteinte_palier,
+    calculer_projection_plan, TOLERANCE_AVANCE_JOURS,
+    realise_par_mois, statut_apport_mensuel, synthese_plan_vs_reel,
+)
 from utils.formatting import (
     inject_css, kpi_card, section_header, page_header, empty_state,
-    fmt_gnf, fmt_gnf_court, fmt_pct, progress_bar, divider, spacer,
+    fmt_gnf, fmt_gnf_court, fmt_pct, fmt_date_fr, progress_bar, divider, spacer,
 )
 from utils.charts import chart_objectifs_gauge
 from utils.runtime import is_read_only_mode, read_only_notice
@@ -24,10 +33,9 @@ st.page_link("pages/1_Dashboard.py", label="← Retour au tableau de bord", icon
 
 @st.cache_data(ttl=60)
 def load():
-    return get_objectifs(), get_mouvements(), get_comptes(), get_taux()
+    return get_objectifs(), get_mouvements(), get_comptes()
 
-df_obj, df_mvt, df_cpt, df_taux = load()
-dernier_taux = get_dernier_taux(df_taux)
+df_obj, df_mvt, df_cpt = load()
 objectifs_principaux = pd.DataFrame([
     {
         "id": OBJECTIF_SEPTEMBRE_ID,
@@ -36,6 +44,9 @@ objectifs_principaux = pd.DataFrame([
         "date_cible": OBJECTIF_SEPTEMBRE_DATE,
         "description": "50% du capital cible — 250 millions GNF",
         "actif": True,
+        "cloture": False,
+        "capital_gele_gnf": 0,
+        "date_cloture": "",
     },
     {
         "id": OBJECTIF_DECEMBRE_ID,
@@ -44,6 +55,9 @@ objectifs_principaux = pd.DataFrame([
         "date_cible": OBJECTIF_DECEMBRE_DATE,
         "description": "100% du capital cible — 500 millions GNF",
         "actif": True,
+        "cloture": False,
+        "capital_gele_gnf": 0,
+        "date_cloture": "",
     },
 ])
 if df_obj is None or df_obj.empty:
@@ -59,7 +73,11 @@ READ_ONLY = is_read_only_mode()
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 nb_obj = len(df_obj) if df_obj is not None else 0
 nb_att = len(df_prog[df_prog["atteint"]]) if df_prog is not None and not df_prog.empty and "atteint" in df_prog else 0
-nb_act = len(df_obj[df_obj["actif"].astype(str).str.lower() == "true"]) if not df_obj.empty else 0
+_est_cloture_kpi = (
+    df_obj["cloture"].astype(str).str.lower() == "true"
+    if "cloture" in df_obj.columns else pd.Series(False, index=df_obj.index)
+)
+nb_act = len(df_obj[(df_obj["actif"].astype(str).str.lower() == "true") & (~_est_cloture_kpi)]) if not df_obj.empty else 0
 
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -71,122 +89,393 @@ with c3:
 
 st.markdown(divider(), unsafe_allow_html=True)
 
-# ── Cartes objectifs ──────────────────────────────────────────────────────────
+# ── Cartes objectifs — 5 paliers de capital ────────────────────────────────────
 st.markdown(section_header("Suivi des objectifs", "📊", "#B65C2E"), unsafe_allow_html=True)
 
-if df_prog is not None and not df_prog.empty:
-    actifs = df_prog[df_prog["actif"].astype(str).str.lower() == "true"]
-    if not actifs.empty:
-        for i_obj, (_, row) in enumerate(actifs.iterrows()):
-            cible   = float(row["montant_cible_gnf"])
-            date_c  = str(row.get("date_cible", ""))
-            atteint = bool(row["atteint"])
+@st.cache_data(ttl=60)
+def load_plan():
+    return get_plan_apports()
 
-            effort  = calculer_effort_objectif(capital, cible, date_c)
-            pct     = effort["progress_pct"]
-            reste   = effort["reste_gnf"]
-            jours   = effort["jours_restants"]
-            statut  = effort["statut"]
-            c_stat  = effort["couleur_statut"]
-            e_mens  = effort["effort_mensuel"]
-            e_hebo  = effort["effort_hebdomadaire"]
-            e_jour  = effort["effort_journalier"]
+df_plan = load_plan()
+AUJOURDHUI = date.today()
 
-            if atteint:
-                jours_txt = "✅ Atteint avant l'échéance !"
-            elif jours < 0:
-                jours_txt = f"⚠️ Dépassé de {-jours} jours"
-            else:
-                jours_txt = f"{jours} jours restants"
+_apport_moy = apport_moyen_mensuel(df_mvt)  # rythme réel — inchangé
 
-            color   = "#3E7C51" if atteint else ("#B65C2E" if pct >= 50 else "#99651A")
-            bar_col = "green"  if atteint else ("blue"    if pct >= 50 else "amber")
+# Apports prévus pour le mois courant (utilisé pour "Capital prévu fin de mois"),
+# lus depuis le plan d'apports GNF — jamais de conversion, jamais de devise.
+_mois_actuel_periode = pd.Timestamp(AUJOURDHUI).to_period("M")
+if df_plan is not None and not df_plan.empty:
+    _dfp = df_plan.copy()
+    _dfp["mois_periode"] = pd.to_datetime(_dfp["mois"], errors="coerce").dt.to_period("M")
+    _dfp["montant_prevu_gnf"] = pd.to_numeric(_dfp["montant_prevu_gnf"], errors="coerce").fillna(0.0)
+    _apports_prevus_mois_actuel = float(_dfp.loc[_dfp["mois_periode"] == _mois_actuel_periode, "montant_prevu_gnf"].sum())
+else:
+    _apports_prevus_mois_actuel = 0.0
 
-            _statut_color_map = {
-                "green": ("#166534", "#dcfce7"),
-                "blue":  ("#9C4B22", "#FBF0E7"),
-                "amber": ("#92400e", "#fef3c7"),
-                "red":   ("#991b1b", "#fee2e2"),
-            }
-            _sc, _sbg = _statut_color_map.get(c_stat, ("#4A4238", "#F5F1EA"))
+# Calcule tous les indicateurs de chaque palier — logique centralisée dans
+# utils.calculs.calculer_palier (rythme réel, INCHANGÉE) et calculer_projection_plan
+# (plan personnel, 100% GNF, strictement séparée du réel).
+_paliers_calc = []
+for _p in PALIERS_CAPITAL:
+    _c = calculer_palier(capital, _p["montant_cible_gnf"], _p["date_cible"], _apport_moy, _apports_prevus_mois_actuel)
+    _proj_plan = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], df_plan, AUJOURDHUI)
+    _c.update(_proj_plan)
+    _c["id"] = _p["id"]
+    _c["nom"] = _p["nom"]
+    _c["icone"] = _p.get("icone", "🎯")
+    # La date réelle d'atteinte vient TOUJOURS de l'historique réel des mouvements,
+    # jamais du plan — un palier "prévu atteint" n'est pas un palier réellement atteint.
+    _c["date_atteinte"] = date_atteinte_palier(df_mvt, df_cpt, _p["montant_cible_gnf"]) if _c["atteint"] else None
+    _paliers_calc.append(_c)
 
-            # Pré-calcul du bloc effort hors f-string principale pour éviter
-            # les f-strings imbriquées (Streamlit peut afficher leurs balises en texte brut)
-            _lbl_style = "font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem"
-            _val_style = "font-size:.85rem;font-weight:700;color:#6B5B95"
-            _reste_color = "#3E7C51" if atteint else "#B3432F"
-            if atteint:
-                _effort_html = ""
-            else:
-                _effort_html = (
-                    "<div>"
-                    f"<div style='{_lbl_style}'>Effort / mois</div>"
-                    f"<div style='{_val_style}'>{fmt_gnf_court(e_mens, dernier_taux)}</div>"
-                    "</div>"
-                    "<div>"
-                    f"<div style='{_lbl_style}'>Effort / semaine</div>"
-                    f"<div style='{_val_style}'>{fmt_gnf_court(e_hebo, dernier_taux)}</div>"
-                    "</div>"
-                    "<div>"
-                    f"<div style='{_lbl_style}'>Effort / jour</div>"
-                    f"<div style='{_val_style}'>{fmt_gnf_court(e_jour, dernier_taux)}</div>"
-                    "</div>"
-                )
+# Le premier palier non atteint (staircase 200M → 250M → 300M → 400M → 500M)
+# devient automatiquement l'objectif actif, mis en avant visuellement.
+_idx_actif = next((i for i, c in enumerate(_paliers_calc) if not c["atteint"]), None)
 
-            _card_html = (
-                '<div class="obj-card">'
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">'
-                "<div>"
-                f'<div class="obj-card-title">{row["nom_objectif"]}</div>'
-                f'<div class="obj-card-desc">{str(row.get("description", ""))[:120]}</div>'
-                "</div>"
-                '<div style="text-align:right;flex-shrink:0;margin-left:1rem">'
-                f'<div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>'
-                f'<div style="font-size:.72rem;color:#7F7568;margin-top:.15rem;font-weight:500">{jours_txt}</div>'
-                f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
-                f'background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{statut}</span>'
-                "</div>"
-                "</div>"
-                + progress_bar(pct, bar_col, "10px") +
-                '<div style="display:flex;gap:2rem;margin-top:.8rem;flex-wrap:wrap">'
-                "<div>"
-                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Capital actuel</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(capital)}</div>'
-                "</div>"
-                "<div>"
-                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Cible</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(cible)}</div>'
-                "</div>"
-                "<div>"
-                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Reste</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:{_reste_color}">{fmt_gnf(reste) if not atteint else "—"}</div>'
-                "</div>"
-                "<div>"
-                f'<div style="font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem">Échéance</div>'
-                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{date_c}</div>'
-                "</div>"
-                + _effort_html +
-                "</div>"
-                "</div>"
+_statut_color_map = {
+    "green": ("#166534", "#dcfce7"),
+    "blue":  ("#9C4B22", "#FBF0E7"),
+    "amber": ("#92400e", "#fef3c7"),
+    "red":   ("#991b1b", "#fee2e2"),
+}
+_lbl_style = "font-size:.63rem;font-weight:600;text-transform:none;letter-spacing:0;color:#7F7568;margin-bottom:.1rem"
+_val_style = "font-size:.85rem;font-weight:700;color:#241F19"
+
+for i_pal, calc in enumerate(_paliers_calc):
+    est_actif = (i_pal == _idx_actif)
+    atteint = calc["atteint"]
+    pct = calc["progress_pct"]
+    _sc, _sbg = _statut_color_map.get(calc["couleur_statut"], ("#4A4238", "#F5F1EA"))
+
+    color   = "#3E7C51" if atteint else ("#B65C2E" if pct >= 50 else "#99651A")
+    bar_col = "green"   if atteint else ("blue"    if pct >= 50 else "amber")
+
+    if atteint:
+        _date_prev_txt = f"Atteint le {fmt_date_fr(calc['date_atteinte'])}" if calc["date_atteinte"] else "Atteint"
+    elif calc["date_previsionnelle"] is None:
+        _date_prev_txt = "Prévision indisponible"
+    else:
+        _date_prev_txt = fmt_date_fr(calc["date_previsionnelle"])
+
+    # L'indicateur d'effort change de forme selon la proximité de l'échéance —
+    # un taux "par mois" n'a aucun sens à quelques jours de la cible.
+    _effort_mode = calc["effort_mode"]
+    if _effort_mode == "atteint":
+        _effort_label, _effort_txt = "💰 Effort mensuel", "—"
+    elif _effort_mode == "mensuel":
+        _effort_label = "💰 Effort mensuel"
+        _effort_txt = f"{fmt_gnf_court(calc['effort_mensuel'])} / mois"  # jamais de taux -> pas d'équivalent EUR
+    elif _effort_mode == "avant_echeance":
+        _effort_label, _effort_txt = "💰 Montant à apporter avant l'échéance", fmt_gnf(calc["reste_gnf"])
+    elif _effort_mode == "aujourdhui":
+        _effort_label, _effort_txt = "💰 Montant à apporter aujourd'hui", fmt_gnf(calc["reste_gnf"])
+    else:  # "depasse"
+        _effort_label, _effort_txt = "🔴 Échéance dépassée", f"Capital manquant : {fmt_gnf(calc['reste_gnf'])}"
+
+    _apport_moy_txt = (
+        fmt_gnf_court(calc["apport_mensuel_moyen"])  # jamais de taux -> pas d'équivalent EUR
+        if calc["apport_mensuel_moyen"] else "Données insuffisantes"
+    )
+
+    # Écart PRÉVISIONNEL (projection du rythme réel vs date cible) — jamais
+    # "de retard" avant l'échéance : c'est un risque projeté, pas un fait constaté.
+    if atteint:
+        _ecart_txt, _ecart_sous_texte = "—", ""
+    elif calc["ecart_planning_jours"] is None:
+        _ecart_txt, _ecart_sous_texte = "Indisponible", ""
+    else:
+        _ej = calc["ecart_planning_jours"]
+        if _ej <= 0:
+            _ecart_txt = f"{abs(_ej)} j d'avance"
+            _ecart_sous_texte = ""
+        else:
+            _ecart_txt = f"+{_ej} jours (après la cible)"
+            _ecart_sous_texte = (
+                f"Au rythme réel actuel, l'objectif serait atteint environ {_ej} jours "
+                "après la date cible." if _ej > TOLERANCE_AVANCE_JOURS else ""
             )
 
-            col_info, col_gauge = st.columns([3, 1])
-            with col_info:
-                st.markdown(_card_html, unsafe_allow_html=True)
-            with col_gauge:
-                st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
-                st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)
-                st.plotly_chart(chart_objectifs_gauge(row["nom_objectif"], pct, color), use_container_width=True, config={"displayModeBar": False}, key=f"gauge_{i_obj}")
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
+    # ── Projection SELON MON PLAN (100% GNF, strictement séparée du réel) ──────
+    if atteint:
+        _date_plan_txt = "Atteint"
+    elif calc["date_selon_plan"] is None:
+        _date_plan_txt = "Non atteint avec le planning actuel"
     else:
-        st.success("🎉 Tous les objectifs actifs sont atteints !")
-else:
+        _date_plan_txt = fmt_date_fr(calc["date_selon_plan"])
+
+    _ecart_capital = calc["ecart_capital_planning"]
+    if atteint:
+        _marge_txt, _marge_color = "—", "#241F19"
+    elif _ecart_capital >= 0:
+        _marge_txt = f"✅ Besoin couvert par le planning · 🟢 Marge prévisionnelle : +{fmt_gnf(_ecart_capital)}"
+        _marge_color = "#3E7C51"
+    else:
+        _marge_txt = f"🔴 Manque à couvrir : {fmt_gnf(abs(_ecart_capital))}"
+        _marge_color = "#B3432F"
+
+    # Apports prévus (avant l'échéance) VS reste réel — couverture du besoin par le seul planning
+    if atteint:
+        _apports_avant_txt, _couverture_txt = "—", "—"
+    else:
+        _apports_avant_txt = fmt_gnf(calc["apports_prevus_avant_echeance"])
+        _cp = calc["couverture_plan_pct"]
+        _couverture_txt = f"{_cp:.0f} %" if _cp is not None else "—"
+
+    _sc_plan, _sbg_plan = _statut_color_map.get(calc["couleur_statut_plan"], ("#4A4238", "#F5F1EA"))
+    _badge_statut_plan = (
+        f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
+        f'background:{_sbg_plan};color:{_sc_plan};display:inline-block">{calc["statut_plan"]}</span>'
+    )
+
+    # Palier atteint : reste élégant mais plus discret. Palier actif : légèrement mis en avant.
+    if atteint:
+        _card_style = "opacity:.72"
+    elif est_actif:
+        _card_style = "border:2px solid #B65C2E;box-shadow:0 4px 14px rgba(182,92,46,.15)"
+    else:
+        _card_style = ""
+    _badge_actif = (
+        '<span style="font-size:.62rem;font-weight:700;padding:.1rem .5rem;border-radius:20px;'
+        'background:#B65C2E;color:#fff;margin-left:.5rem;vertical-align:middle">🎯 Palier actif</span>'
+        if est_actif else ""
+    )
+
+    _card_html = (
+        f'<div class="obj-card" style="{_card_style}">'
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">'
+        "<div>"
+        f'<div class="obj-card-title">{calc["icone"]} {calc["nom"]} — {fmt_gnf_court(calc["montant_cible"])}{_badge_actif}</div>'
+        "</div>"
+        '<div style="text-align:right;flex-shrink:0;margin-left:1rem">'
+        f'<div class="obj-pct" style="color:{color}">{fmt_pct(pct)}</div>'
+        f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
+        f'background:{_sbg};color:{_sc};margin-top:.25rem;display:inline-block">{calc["statut"]}</span>'
+        "</div>"
+        "</div>"
+        + progress_bar(pct, bar_col, "10px") +
+        '<div style="display:flex;gap:1.6rem;margin-top:.8rem;flex-wrap:wrap">'
+        f'<div><div style="{_lbl_style}">Capital actuel</div><div style="{_val_style}">{fmt_gnf(capital)}</div></div>'
+        f'<div><div style="{_lbl_style}">Reste</div>'
+        f'<div style="{_val_style};color:{"#3E7C51" if atteint else "#B3432F"}">'
+        f'{fmt_gnf(calc["reste_gnf"]) if not atteint else "—"}</div></div>'
+        f'<div><div style="{_lbl_style}">Date cible</div><div style="{_val_style}">{fmt_date_fr(calc["date_cible"])}</div></div>'
+        f'<div><div style="{_lbl_style}">📈 Selon rythme réel</div><div style="{_val_style}">{_date_prev_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Apport moyen mensuel (réel)</div><div style="{_val_style}">{_apport_moy_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Apports prévus ce mois</div>'
+        f'<div style="{_val_style}">{fmt_gnf(calc["apports_prevus_mois"])}</div></div>'
+        f'<div><div style="{_lbl_style}">Capital prévu fin de mois</div>'
+        f'<div style="{_val_style}">{fmt_gnf(calc["capital_prevu_fin_mois"])}</div></div>'
+        f'<div><div style="{_lbl_style}">{_effort_label}</div><div style="{_val_style}">{_effort_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Écart prévisionnel (rythme réel)</div><div style="{_val_style}">{_ecart_txt}</div>'
+        + (f'<div style="font-size:.68rem;color:#7F7568;margin-top:.15rem;max-width:220px">{_ecart_sous_texte}</div>' if _ecart_sous_texte else "")
+        + '</div>'
+        "</div>"
+        '<div style="display:flex;gap:1.6rem;margin-top:.6rem;flex-wrap:wrap;padding-top:.6rem;'
+        'border-top:1px dashed #E8E1D6">'
+        f'<div><div style="{_lbl_style}">📅 Selon mon plan</div><div style="{_val_style}">{_date_plan_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">💰 Capital prévu à échéance</div><div style="{_val_style}">{fmt_gnf(calc["capital_prevu_echeance"])}</div></div>'
+        f'<div><div style="{_lbl_style}">📅 Apports prévus avant échéance</div><div style="{_val_style}">{_apports_avant_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Couverture du reste par le plan</div><div style="{_val_style}">{_couverture_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Marge / manque prévisionnel</div>'
+        f'<div style="{_val_style};color:{_marge_color}">{_marge_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">Statut du plan</div><div>{_badge_statut_plan}</div></div>'
+        "</div>"
+        "</div>"
+    )
+
+    col_info, col_gauge = st.columns([3, 1])
+    with col_info:
+        st.markdown(_card_html, unsafe_allow_html=True)
+    with col_gauge:
+        st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+        st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)
+        st.plotly_chart(
+            chart_objectifs_gauge(calc["nom"], pct, color), use_container_width=True,
+            config={"displayModeBar": False}, key=f"gauge_palier_{i_pal}",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
+
+# ── Plan d'apports prévisionnels (100% GNF) ─────────────────────────────────────
+st.markdown(divider(), unsafe_allow_html=True)
+st.markdown(section_header("Plan d'apports", "📅", "#6B5B95"), unsafe_allow_html=True)
+st.caption(
+    "Planning personnel en GNF, séparé du capital réel. Un apport prévu ne devient "
+    "réel — et n'augmente le capital — que lorsqu'il est réellement enregistré dans les mouvements."
+)
+
+_realise = realise_par_mois(df_mvt)  # pd.Series indexée par pd.Period('M'), en GNF réel
+
+# ── Synthèse prévu vs réel (mois déjà échus uniquement) ────────────────────────
+_synth = synthese_plan_vs_reel(df_plan, df_mvt, AUJOURDHUI)
+sc1, sc2, sc3, sc4 = st.columns(4)
+with sc1:
+    st.markdown(kpi_card("Prévu échu", fmt_gnf(_synth["prevu_echu_gnf"]), icon="📋", color="slate"), unsafe_allow_html=True)
+with sc2:
+    st.markdown(kpi_card("Réellement apporté", fmt_gnf(_synth["reel_gnf"]), icon="💼", color="blue"), unsafe_allow_html=True)
+with sc3:
+    _c_ecart = "green" if _synth["ecart_gnf"] >= 0 else "red"
+    st.markdown(kpi_card("Écart", fmt_gnf(_synth["ecart_gnf"]), icon="⚖️", color=_c_ecart), unsafe_allow_html=True)
+with sc4:
+    _txt_real = f"{_synth['taux_realisation_pct']:.1f} %" if _synth["taux_realisation_pct"] is not None else "—"
+    st.markdown(kpi_card("Taux de réalisation", _txt_real, icon="📊", color="amber"), unsafe_allow_html=True)
+
+st.markdown(spacer("0.6rem"), unsafe_allow_html=True)
+
+# ── Tableau mensuel : prévu / réalisé / écart / statut ─────────────────────────
+if df_plan is None or df_plan.empty:
     st.markdown(
-        empty_state("🎯", "Aucun objectif défini", "Créez votre premier objectif ci-dessous pour suivre la progression."),
+        empty_state("📅", "Aucun apport planifié", "Ajoutez votre premier apport prévu ci-dessous."),
         unsafe_allow_html=True,
     )
+else:
+    _lignes = []
+    for _, _r in df_plan.iterrows():
+        _mp = pd.to_datetime(_r["mois"], errors="coerce")
+        if pd.isna(_mp):
+            continue
+        _periode = _mp.to_period("M")
+        _prevu = float(pd.to_numeric(_r["montant_prevu_gnf"], errors="coerce") or 0.0)
+        _reel = float(_realise.get(_periode, 0.0))
+        _statut = statut_apport_mensuel(_mp.date(), _prevu, _reel, AUJOURDHUI)
+        _lignes.append({
+            "id": _r["id"],
+            "Mois": fmt_date_fr(_mp.date()),
+            "_periode": _periode,
+            "Prévu (GNF)": _prevu,
+            "Réalisé (GNF)": _reel,
+            "Écart (GNF)": _reel - _prevu,
+            "Statut": _statut,
+        })
+    _df_tableau = pd.DataFrame(_lignes).sort_values("_periode").drop(columns="_periode")
+    st.dataframe(
+        _df_tableau.drop(columns="id").style.format({
+            "Prévu (GNF)": lambda v: fmt_gnf(v),
+            "Réalisé (GNF)": lambda v: fmt_gnf(v),
+            "Écart (GNF)": lambda v: fmt_gnf(v),
+        }),
+        use_container_width=True, hide_index=True,
+    )
+
+st.markdown(spacer("0.6rem"), unsafe_allow_html=True)
+
+# ── CRUD : ajouter / modifier / supprimer un apport prévu ──────────────────────
+_premier_jour_mois_prochain = (date.today().replace(day=28) + timedelta(days=4)).replace(day=1)
+
+with st.expander("➕  Ajouter un apport prévu", expanded=False):
+    with st.form("form_add_plan", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            _nouv_mois = st.date_input(
+                "Mois de l'apport", value=_premier_jour_mois_prochain,
+                format="DD/MM/YYYY", key="add_plan_mois",
+            )
+        with col2:
+            _nouv_montant = st.number_input(
+                "Montant prévu (GNF)", min_value=0.0, step=1_000_000.0, format="%.0f", key="add_plan_montant",
+            )
+        if st.form_submit_button("Ajouter", type="primary", disabled=READ_ONLY):
+            if _nouv_montant <= 0:
+                st.error("Le montant doit être supérieur à 0.")
+            else:
+                _mois_str = _nouv_mois.replace(day=1).isoformat()
+                if add_plan_apport(_mois_str, _nouv_montant):
+                    st.success(f"✅ Apport prévu ajouté pour {fmt_date_fr(_nouv_mois.replace(day=1))}.")
+                    st.cache_data.clear()
+                    st.rerun()
+
+if df_plan is not None and not df_plan.empty:
+    with st.expander("✏️  Modifier ou supprimer un apport prévu", expanded=False):
+        def _fmt_plan_label(_r) -> str:
+            _mp = pd.to_datetime(_r["mois"], errors="coerce")
+            _lbl_mois = fmt_date_fr(_mp.date()) if not pd.isna(_mp) else str(_r["mois"])
+            return f'{_lbl_mois} — {fmt_gnf(_r["montant_prevu_gnf"])}'
+
+        _plan_map = {_r["id"]: _fmt_plan_label(_r) for _, _r in df_plan.iterrows()}
+        _choix_plan = st.selectbox(
+            "Apport prévu", list(_plan_map.keys()), format_func=lambda x: _plan_map.get(x, x), key="select_plan_edit",
+        )
+        if _choix_plan:
+            _sel_rows = df_plan[df_plan["id"] == _choix_plan]
+            if _sel_rows.empty:
+                st.warning("Apport introuvable — rechargez la page.")
+            else:
+                _sel_plan = _sel_rows.iloc[0]
+                with st.form("form_edit_plan"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        try:    _mois_val = pd.Timestamp(_sel_plan["mois"]).date()
+                        except: _mois_val = date.today().replace(day=1)
+                        _mod_mois = st.date_input("Mois", value=_mois_val, format="DD/MM/YYYY", key="edit_plan_mois")
+                    with col2:
+                        _mod_montant = st.number_input(
+                            "Montant prévu (GNF)", min_value=0.0,
+                            value=float(_sel_plan["montant_prevu_gnf"]), step=1_000_000.0, format="%.0f",
+                            key="edit_plan_montant",
+                        )
+                    col_save, col_del = st.columns(2)
+                    with col_save:
+                        if st.form_submit_button("Mettre à jour", type="primary", disabled=READ_ONLY):
+                            if update_plan_apport(_choix_plan, {
+                                "mois": _mod_mois.replace(day=1).isoformat(),
+                                "montant_prevu_gnf": _mod_montant,
+                            }):
+                                st.success("✅ Apport prévu mis à jour — toutes les projections sont recalculées.")
+                                st.cache_data.clear()
+                                st.rerun()
+                    with col_del:
+                        if st.form_submit_button("🗑️ Supprimer", disabled=READ_ONLY):
+                            if delete_plan_apport(_choix_plan):
+                                st.success("🗑️ Apport prévu supprimé.")
+                                st.cache_data.clear()
+                                st.rerun()
+
+# ── Objectifs clôturés ──────────────────────────────────────────────────────────
+if df_prog is not None and not df_prog.empty and "cloture" in df_prog.columns:
+    cloturés = df_prog[df_prog["cloture"].astype(str).str.lower() == "true"]
+    if not cloturés.empty:
+        st.markdown(divider(), unsafe_allow_html=True)
+        st.markdown(section_header("Objectifs clôturés", "🔒", "#6B6155"), unsafe_allow_html=True)
+        for _, row in cloturés.iterrows():
+            _pct    = row["progress_pct"]
+            _reste  = row["reste_gnf"]
+            _capgel = row.get("capital_gele_gnf", 0)
+            _dcl    = str(row.get("date_cloture", ""))
+            _color  = "#3E7C51" if bool(row["atteint"]) else "#7F7568"
+            st.markdown(
+                '<div class="obj-card" style="opacity:.85">'
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.4rem">'
+                "<div>"
+                f'<div class="obj-card-title">{row["nom_objectif"]}</div>'
+                f'<div class="obj-card-desc">Échéance initiale : {row.get("date_cible", "")} · '
+                f'Clôturé le {_dcl}</div>'
+                "</div>"
+                '<div style="text-align:right;flex-shrink:0;margin-left:1rem">'
+                f'<div class="obj-pct" style="color:{_color}">{fmt_pct(_pct)}</div>'
+                '<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
+                'background:#F5F1EA;color:#4A4238;margin-top:.25rem;display:inline-block">🔒 Clôturé</span>'
+                "</div>"
+                "</div>"
+                + progress_bar(_pct, "amber" if not bool(row["atteint"]) else "green", "8px") +
+                '<div style="display:flex;gap:2rem;margin-top:.6rem;flex-wrap:wrap">'
+                "<div>"
+                '<div style="font-size:.63rem;font-weight:600;color:#7F7568;margin-bottom:.1rem">Capital au moment de la clôture</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(_capgel)}</div>'
+                "</div>"
+                "<div>"
+                '<div style="font-size:.63rem;font-weight:600;color:#7F7568;margin-bottom:.1rem">Cible</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#241F19">{fmt_gnf(row["montant_cible_gnf"])}</div>'
+                "</div>"
+                "<div>"
+                '<div style="font-size:.63rem;font-weight:600;color:#7F7568;margin-bottom:.1rem">Manquant à la clôture</div>'
+                f'<div style="font-size:.85rem;font-weight:700;color:#B3432F">{fmt_gnf(_reste) if not bool(row["atteint"]) else "—"}</div>'
+                "</div>"
+                "</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(spacer("0.25rem"), unsafe_allow_html=True)
 
 st.markdown(divider(), unsafe_allow_html=True)
 

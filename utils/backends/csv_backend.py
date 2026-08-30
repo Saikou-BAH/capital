@@ -15,8 +15,10 @@ import pandas as pd
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
     COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES, COLS_DEPENSES_REPARTITION,
+    COLS_PLANIFICATION, COLS_PLAN_APPORTS,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
     SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES, SHEET_DEPENSES_REPARTITION,
+    SHEET_PLANIFICATION, SHEET_PLAN_APPORTS,
 )
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -225,12 +227,72 @@ def add_objectif(nom: str, montant_cible_gnf: float, date_cible: str,
         "date_cible": date_cible,
         "description": description,
         "actif": str(actif),
+        "cloture": "False",
+        "capital_gele_gnf": "",
+        "date_cloture": "",
     }
     return _append_csv(SHEET_OBJECTIFS, COLS_OBJECTIFS, row)
 
 
 def update_objectif(obj_id: str, updates: dict) -> bool:
     return _update_csv(SHEET_OBJECTIFS, COLS_OBJECTIFS, obj_id, updates)
+
+
+# ── API publique — Planification mensuelle ────────────────────────────────────
+
+def get_planification_mois(mois: str) -> float:
+    """Montant d'apports prévus enregistré pour le mois ("YYYY-MM"), 0.0 si absent."""
+    df = _read_csv(SHEET_PLANIFICATION, COLS_PLANIFICATION)
+    if df is None or df.empty:
+        return 0.0
+    ligne = df[df["mois"].astype(str) == mois]
+    if ligne.empty:
+        return 0.0
+    try:
+        return float(ligne.iloc[0]["apports_prevus_gnf"])
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def set_planification_mois(mois: str, montant: float) -> bool:
+    """Crée ou met à jour le montant d'apports prévus pour le mois ("YYYY-MM")."""
+    df = _read_csv(SHEET_PLANIFICATION, COLS_PLANIFICATION)
+    existant = df[df["mois"].astype(str) == mois] if df is not None and not df.empty else pd.DataFrame()
+    if existant.empty:
+        row = {
+            "id": _new_id("plan-"),
+            "mois": mois,
+            "apports_prevus_gnf": montant,
+            "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        return _append_csv(SHEET_PLANIFICATION, COLS_PLANIFICATION, row)
+    plan_id = str(existant.iloc[0]["id"])
+    return _update_csv(SHEET_PLANIFICATION, COLS_PLANIFICATION, plan_id, {"apports_prevus_gnf": montant})
+
+
+# ── API publique — Plan d'apports prévisionnels ────────────────────────────────
+
+def get_plan_apports() -> pd.DataFrame:
+    return _read_csv(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS)
+
+
+def add_plan_apport(mois: str, montant_prevu_gnf: float) -> bool:
+    """Ajoute une ligne planifiée en GNF. `mois` = premier jour du mois ("YYYY-MM-DD")."""
+    row = {
+        "id": _new_id("plan-app-"),
+        "mois": mois,
+        "montant_prevu_gnf": montant_prevu_gnf,
+        "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    return _append_csv(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, row)
+
+
+def update_plan_apport(plan_id: str, updates: dict) -> bool:
+    return _update_csv(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, plan_id, updates)
+
+
+def delete_plan_apport(plan_id: str) -> bool:
+    return _delete_csv(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, plan_id)
 
 
 # ── API publique — Taux de conversion ────────────────────────────────────────

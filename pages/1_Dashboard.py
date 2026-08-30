@@ -6,8 +6,8 @@ from datetime import date
 
 from utils.config import (
     CAPITAL_CIBLE_GNF,
-    OBJECTIF_SEPTEMBRE_ID, OBJECTIF_SEPTEMBRE_NOM, OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_SEPTEMBRE_DATE,
-    OBJECTIF_DECEMBRE_ID, OBJECTIF_DECEMBRE_NOM, OBJECTIF_DECEMBRE_MONTANT, OBJECTIF_DECEMBRE_DATE,
+    OBJECTIF_SEPTEMBRE_MONTANT, OBJECTIF_DECEMBRE_MONTANT,
+    PALIERS_CAPITAL,
 )
 from utils.data_loader import (
     get_investisseurs, get_comptes, get_mouvements,
@@ -18,11 +18,11 @@ from utils.calculs import (
     parts_par_investisseur, valeurs_par_compte,
     repartition_par_pays, repartition_par_devise,
     evolution_capital, evolution_apports_par_investisseur,
-    progression_objectifs, calculer_effort_objectif,
+    calculer_palier, apport_moyen_mensuel,
 )
 from utils.formatting import (
     inject_css, kpi_card, hero_banner, section_header, page_header,
-    summary_bar, fmt_gnf, fmt_gnf_court, fmt_pct, fmt_taux, fmt_eur,
+    summary_bar, fmt_gnf, fmt_gnf_court, fmt_pct, fmt_taux, fmt_eur, fmt_date_fr,
     badge_mouvement, progress_bar, progress_labeled,
     divider, spacer, empty_state, stat_row, attention_panel,
 )
@@ -88,23 +88,18 @@ _mois_vers_dec = max((pd.Timestamp("2026-12-31") - pd.Timestamp.now()).days / 30
 _projection_frais_dec = total_frais + _rythme_frais_mensuel * _mois_vers_dec
 _part_frais_pct = (total_frais / bilan["capital_brut_apporte"] * 100) if bilan["capital_brut_apporte"] > 0 else 0.0
 
-# Merge objectifs hardcodés + objectifs personnalisés du CSV
-_obj_principaux = pd.DataFrame([
-    {"id": OBJECTIF_SEPTEMBRE_ID, "nom_objectif": OBJECTIF_SEPTEMBRE_NOM,
-     "montant_cible_gnf": OBJECTIF_SEPTEMBRE_MONTANT, "date_cible": OBJECTIF_SEPTEMBRE_DATE,
-     "description": "50% du capital cible — 250 millions GNF", "actif": True},
-    {"id": OBJECTIF_DECEMBRE_ID, "nom_objectif": OBJECTIF_DECEMBRE_NOM,
-     "montant_cible_gnf": OBJECTIF_DECEMBRE_MONTANT, "date_cible": OBJECTIF_DECEMBRE_DATE,
-     "description": "100% du capital cible — 500 millions GNF", "actif": True},
-])
-if df_obj is None or df_obj.empty:
-    _df_obj_all = _obj_principaux
-else:
-    _ids_existants = set(df_obj["id"].astype(str)) if "id" in df_obj.columns else set()
-    _manquants = _obj_principaux[~_obj_principaux["id"].astype(str).isin(_ids_existants)]
-    _df_obj_all = pd.concat([df_obj, _manquants], ignore_index=True)
-
-df_obj_prog = progression_objectifs(_df_obj_all, capital_total)
+# Les 5 paliers de capital (Suivi des objectifs) sont la SEULE source de vérité
+# pour "prochain objectif" / "nécessite votre attention" / la section Objectifs
+# ci-dessous — mêmes cibles, même logique (calculer_palier) que la page Objectifs,
+# pour ne jamais afficher un statut différent d'une page à l'autre.
+_apport_moy_dash = apport_moyen_mensuel(df_mvt)
+_paliers_dash = []
+for _p in PALIERS_CAPITAL:
+    _c = calculer_palier(capital_total, _p["montant_cible_gnf"], _p["date_cible"], _apport_moy_dash, 0.0)
+    _c["nom"] = _p["nom"]
+    _c["icone"] = _p.get("icone", "🎯")
+    _paliers_dash.append(_c)
+_idx_actif_dash = next((i for i, c in enumerate(_paliers_dash) if not c["atteint"]), None)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HERO + OBJECTIF RAPIDE
@@ -120,22 +115,19 @@ with col_hero:
 with col_side:
     st.markdown(spacer("0.4rem"), unsafe_allow_html=True)
 
-    # Prochain objectif non atteint
-    if df_obj_prog is not None and not df_obj_prog.empty:
-        actifs = df_obj_prog[df_obj_prog["actif"].astype(str).str.lower() == "true"]
-        non_att = actifs[~actifs["atteint"]]
-        prochain = non_att.sort_values("montant_cible_gnf").iloc[0] if not non_att.empty else None
-        if prochain is not None:
-            pct_p  = float(prochain["progress_pct"])
-            reste_p = float(prochain["reste_gnf"])
-            c_p = "green" if pct_p >= 75 else ("blue" if pct_p >= 40 else "amber")
-            st.markdown(
-                kpi_card("Prochain objectif", fmt_pct(pct_p),
-                         sub=f"Reste : {fmt_gnf(reste_p)}", color=c_p, icon="🎯"),
-                unsafe_allow_html=True,
-            )
-            st.markdown(progress_bar(pct_p, c_p, "5px"), unsafe_allow_html=True)
-            st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
+    # Prochain palier non atteint (premier de la trajectoire 200M→250M→300M→400M→500M)
+    if _idx_actif_dash is not None:
+        _prochain = _paliers_dash[_idx_actif_dash]
+        pct_p   = float(_prochain["progress_pct"])
+        reste_p = float(_prochain["reste_gnf"])
+        c_p = "green" if pct_p >= 75 else ("blue" if pct_p >= 40 else "amber")
+        st.markdown(
+            kpi_card("Prochain objectif", fmt_pct(pct_p),
+                     sub=f"{_prochain['nom']} · Reste : {fmt_gnf(reste_p)}", color=c_p, icon="🎯"),
+            unsafe_allow_html=True,
+        )
+        st.markdown(progress_bar(pct_p, c_p, "5px"), unsafe_allow_html=True)
+        st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
 
     today_str = date.today().strftime("%d %b %Y")
     st.markdown(
@@ -167,18 +159,19 @@ if df_dep is not None and not df_dep.empty:
             "amber",
         ))
 
-if df_obj_prog is not None and not df_obj_prog.empty:
-    _actifs_retard = df_obj_prog[df_obj_prog["actif"].astype(str).str.lower() == "true"]
-    for _, _orow in _actifs_retard.iterrows():
-        if bool(_orow["atteint"]):
-            continue
-        _eff = calculer_effort_objectif(capital_total, float(_orow["montant_cible_gnf"]), str(_orow.get("date_cible", "")))
-        if _eff["couleur_statut"] == "red":
-            _attn_items.append((
-                "🎯", f"Objectif « {_orow['nom_objectif']} » en retard",
-                _eff["statut"].replace(" 🔴", "") + f" — reste {fmt_gnf(_eff['reste_gnf'])}",
-                "red",
-            ))
+# Un palier n'est signalé ici QUE si son statut réel (calculer_palier — même
+# logique que la page Objectifs) est effectivement rouge : échéance déjà
+# dépassée sans le montant, ou net décrochage du rythme réel (>90 j de retard
+# projeté). Le libellé reprend le statut réel tel quel, jamais "en retard"
+# par défaut — pour ne jamais afficher un palier en retard qui ne l'est pas.
+for _pal in _paliers_dash:
+    if _pal["atteint"] or _pal["couleur_statut"] != "red":
+        continue
+    _attn_items.append((
+        "🎯", f"Palier « {_pal['nom']} » — {_pal['statut']}",
+        f"Reste {fmt_gnf(_pal['reste_gnf'])} · échéance {fmt_pct(_pal['progress_pct'])} atteint",
+        "red",
+    ))
 
 if total_frais > 0 and _part_frais_pct > 2:
     _attn_items.append((
@@ -294,10 +287,15 @@ else:
 st.markdown(divider(), unsafe_allow_html=True)
 st.markdown(section_header("Objectifs", "🎯", "#3E7C51"), unsafe_allow_html=True)
 
-def _obj_card(nom, desc, pct, capital, cible, reste, echeance, atteint):
+def _obj_card(nom, desc, pct, capital, cible, reste, echeance, atteint, statut_texte=None):
     color  = "#3E7C51" if atteint else ("#B65C2E" if pct >= 50 else "#99651A")
     bar_c  = "green" if atteint else ("blue" if pct >= 50 else "amber")
-    status = "✅ Objectif atteint !" if atteint else f"Reste : {fmt_gnf(reste)} · Échéance : {echeance}"
+    if atteint:
+        status = "✅ Objectif atteint !"
+    elif statut_texte:
+        status = f"{statut_texte} · Reste : {fmt_gnf(reste)} · Échéance : {echeance}"
+    else:
+        status = f"Reste : {fmt_gnf(reste)} · Échéance : {echeance}"
     return f"""
 <div class="obj-card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
@@ -326,24 +324,22 @@ def _obj_card(nom, desc, pct, capital, cible, reste, echeance, atteint):
   </div>
 </div>"""
 
-if df_obj_prog is not None and not df_obj_prog.empty:
-    _actifs_dash = df_obj_prog[df_obj_prog["actif"].astype(str).str.lower() == "true"]
-    _obj_rows = list(_actifs_dash.iterrows())
-    for i in range(0, max(len(_obj_rows), 1), 2):
-        _pair = _obj_rows[i:i + 2]
-        _cols = st.columns(len(_pair)) if len(_pair) > 1 else st.columns([1, 1])
-        for j, (_, _row) in enumerate(_pair):
-            with _cols[j]:
-                st.markdown(_obj_card(
-                    str(_row["nom_objectif"]),
-                    str(_row.get("description", "")),
-                    float(_row["progress_pct"]),
-                    capital_total,
-                    float(_row["montant_cible_gnf"]),
-                    float(_row["reste_gnf"]),
-                    str(_row.get("date_cible", "")),
-                    bool(_row["atteint"]),
-                ), unsafe_allow_html=True)
+for i in range(0, len(_paliers_dash), 2):
+    _pair = _paliers_dash[i:i + 2]
+    _cols = st.columns(len(_pair)) if len(_pair) > 1 else st.columns([1, 1])
+    for j, _pal in enumerate(_pair):
+        with _cols[j]:
+            st.markdown(_obj_card(
+                f"{_pal['icone']} {_pal['nom']}",
+                "",
+                float(_pal["progress_pct"]),
+                capital_total,
+                float(_pal["montant_cible"]),
+                float(_pal["reste_gnf"]),
+                fmt_date_fr(_pal["date_cible"]),
+                bool(_pal["atteint"]),
+                statut_texte=_pal["statut"],
+            ), unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

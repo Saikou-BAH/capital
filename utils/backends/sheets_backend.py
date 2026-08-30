@@ -20,8 +20,10 @@ from google.oauth2.service_account import Credentials
 from utils.config import (
     COLS_COMPTES, COLS_INVESTISSEURS, COLS_MOUVEMENTS,
     COLS_OBJECTIFS, COLS_TAUX, COLS_DEPENSES, COLS_DEPENSES_REPARTITION,
+    COLS_PLANIFICATION, COLS_PLAN_APPORTS,
     SHEET_COMPTES, SHEET_INVESTISSEURS, SHEET_MOUVEMENTS,
     SHEET_OBJECTIFS, SHEET_TAUX, SHEET_DEPENSES, SHEET_DEPENSES_REPARTITION,
+    SHEET_PLANIFICATION, SHEET_PLAN_APPORTS,
 )
 
 load_dotenv()
@@ -75,13 +77,18 @@ def is_demo_mode() -> bool:
 def _init_session_demo():
     """Initialise un stockage vide en mémoire (sans données fictives)."""
     if "_sheets_demo" not in st.session_state:
-        from utils.config import SHEET_INVESTISSEURS, SHEET_COMPTES, SHEET_MOUVEMENTS, SHEET_OBJECTIFS, SHEET_TAUX
+        from utils.config import (
+            SHEET_INVESTISSEURS, SHEET_COMPTES, SHEET_MOUVEMENTS, SHEET_OBJECTIFS, SHEET_TAUX,
+            SHEET_PLANIFICATION, SHEET_PLAN_APPORTS,
+        )
         st.session_state["_sheets_demo"] = {
             SHEET_INVESTISSEURS: [],
             SHEET_COMPTES: [],
             SHEET_MOUVEMENTS: [],
             SHEET_OBJECTIFS: [],
             SHEET_TAUX: [],
+            SHEET_PLANIFICATION: [],
+            SHEET_PLAN_APPORTS: [],
         }
 
 
@@ -238,10 +245,57 @@ def add_objectif(nom, montant_cible_gnf, date_cible, description="", actif=True)
         "id": _new_id("obj-"), "nom_objectif": nom,
         "montant_cible_gnf": montant_cible_gnf, "date_cible": date_cible,
         "description": description, "actif": str(actif),
+        "cloture": "False", "capital_gele_gnf": "", "date_cloture": "",
     })
 
 def update_objectif(obj_id: str, updates: dict) -> bool:
     return _update_row(SHEET_OBJECTIFS, COLS_OBJECTIFS, obj_id, updates)
+
+
+def get_planification_mois(mois: str) -> float:
+    """Montant d'apports prévus enregistré pour le mois ("YYYY-MM"), 0.0 si absent."""
+    df = _read_sheet(SHEET_PLANIFICATION, COLS_PLANIFICATION)
+    if df is None or df.empty:
+        return 0.0
+    ligne = df[df["mois"].astype(str) == mois]
+    if ligne.empty:
+        return 0.0
+    try:
+        return float(ligne.iloc[0]["apports_prevus_gnf"])
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def set_planification_mois(mois: str, montant: float) -> bool:
+    """Crée ou met à jour le montant d'apports prévus pour le mois ("YYYY-MM")."""
+    df = _read_sheet(SHEET_PLANIFICATION, COLS_PLANIFICATION)
+    existant = df[df["mois"].astype(str) == mois] if df is not None and not df.empty else pd.DataFrame()
+    if existant.empty:
+        return _add_row(SHEET_PLANIFICATION, COLS_PLANIFICATION, {
+            "id": _new_id("plan-"), "mois": mois, "apports_prevus_gnf": montant,
+            "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    plan_id = str(existant.iloc[0]["id"])
+    return _update_row(SHEET_PLANIFICATION, COLS_PLANIFICATION, plan_id, {"apports_prevus_gnf": montant})
+
+
+def get_plan_apports() -> pd.DataFrame:
+    return _read_sheet(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS)
+
+
+def add_plan_apport(mois: str, montant_prevu_gnf: float) -> bool:
+    return _add_row(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, {
+        "id": _new_id("plan-app-"), "mois": mois, "montant_prevu_gnf": montant_prevu_gnf,
+        "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+
+
+def update_plan_apport(plan_id: str, updates: dict) -> bool:
+    return _update_row(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, plan_id, updates)
+
+
+def delete_plan_apport(plan_id: str) -> bool:
+    return _delete_row(SHEET_PLAN_APPORTS, COLS_PLAN_APPORTS, plan_id)
 
 
 def get_taux() -> pd.DataFrame:

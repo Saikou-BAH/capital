@@ -17,6 +17,48 @@ OBJECTIF_DECEMBRE_NOM = "Objectif Décembre 2026"
 OBJECTIF_DECEMBRE_MONTANT = CAPITAL_CIBLE_GNF  # 500 millions GNF
 OBJECTIF_DECEMBRE_DATE = "2026-12-31"
 
+# ── Paliers de capital — section « Suivi des objectifs » ──────────────────────
+# 5 paliers fixes de la trajectoire de capital de Legend Farm. Uniquement les
+# cibles (montant, date) sont figées ici : le capital actuel et toute la
+# progression restent calculés dynamiquement depuis les données réelles.
+PALIERS_CAPITAL = [
+    {
+        "id": "palier-01",
+        "nom": "Capital initial",
+        "icone": "🏁",
+        "montant_cible_gnf": 200_000_000,
+        "date_cible": "2026-09-01",
+    },
+    {
+        "id": "palier-02",
+        "nom": "Infrastructures sécurisées",
+        "icone": "🏗️",
+        "montant_cible_gnf": 250_000_000,
+        "date_cible": "2026-12-01",
+    },
+    {
+        "id": "palier-03",
+        "nom": "Lancement de l'exploitation",
+        "icone": "🚀",
+        "montant_cible_gnf": 300_000_000,
+        "date_cible": "2027-01-01",
+    },
+    {
+        "id": "palier-04",
+        "nom": "Développement de la ferme",
+        "icone": "🌱",
+        "montant_cible_gnf": 400_000_000,
+        "date_cible": "2027-09-01",
+    },
+    {
+        "id": "palier-05",
+        "nom": "Capital cible Legend Farm",
+        "icone": "🏆",
+        "montant_cible_gnf": 500_000_000,
+        "date_cible": "2028-01-01",
+    },
+]
+
 # ── Devises ───────────────────────────────────────────────────────────────────
 DEVISES = ["GNF", "EUR"]
 DEVISE_REFERENCE = "GNF"
@@ -35,6 +77,7 @@ SHEET_COMPTES       = "comptes"
 SHEET_MOUVEMENTS    = "mouvements"
 SHEET_OBJECTIFS     = "objectifs"
 SHEET_TAUX          = "taux_conversion"
+SHEET_PLANIFICATION = "planification_mensuelle"
 
 # ── Colonnes attendues par onglet ─────────────────────────────────────────────
 COLS_INVESTISSEURS = ["id", "nom", "statut", "notes", "date_creation"]
@@ -55,9 +98,21 @@ COLS_MOUVEMENTS = [
 COLS_OBJECTIFS = [
     "id", "nom_objectif", "montant_cible_gnf",
     "date_cible", "description", "actif",
+    "cloture", "capital_gele_gnf", "date_cloture",
 ]
 
 COLS_TAUX = ["id", "date_taux", "eur_to_gnf", "commentaire", "created_at"]
+
+# Un montant planifié par mois calendaire (format "YYYY-MM"), utilisé pour
+# projeter le capital de fin de mois dans la section « Suivi des objectifs ».
+COLS_PLANIFICATION = ["id", "mois", "apports_prevus_gnf", "date_creation"]
+
+# ── Plan d'apports prévisionnels (planning personnel, distinct du capital réel) ─
+# Une ligne par mois planifié. "mois" = premier jour du mois ("YYYY-MM-01").
+# Montant stocké directement en GNF — aucune devise étrangère, aucun taux de
+# change, aucune conversion. Jamais mélangé aux vrais mouvements financiers.
+SHEET_PLAN_APPORTS = "plan_apports_previsionnels"
+COLS_PLAN_APPORTS = ["id", "mois", "montant_prevu_gnf", "date_creation"]
 
 # Modes de backend disponibles
 BACKENDS_DISPONIBLES = ["csv", "sheets"]

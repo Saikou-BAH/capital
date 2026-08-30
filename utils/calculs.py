@@ -1,7 +1,7 @@
 """Logique métier : calculs du capital, parts, soldes, objectifs."""
 
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from utils.config import TAUX_EUR_GNF_DEFAUT, CAPITAL_CIBLE_GNF, FRAIS_RETRAIT_BAREME
 
 
@@ -834,15 +834,28 @@ def progression_objectifs(
 ) -> pd.DataFrame:
     """
     Ajoute les colonnes progress_pct, reste_gnf, atteint pour chaque objectif.
+
+    Un objectif clôturé (colonne "cloture" == "True") n'utilise plus le capital
+    actuel en direct : sa progression reste figée sur le capital enregistré au
+    moment de la clôture ("capital_gele_gnf"), pour que les apports ultérieurs
+    n'augmentent plus artificiellement un objectif déjà refermé.
     """
     if df_objectifs is None or df_objectifs.empty:
         return pd.DataFrame()
 
     df = df_objectifs.copy()
     df["montant_cible_gnf"] = pd.to_numeric(df["montant_cible_gnf"], errors="coerce").fillna(0)
-    df["progress_pct"] = (capital_actuel / df["montant_cible_gnf"] * 100).clip(upper=100).round(2)
-    df["reste_gnf"]    = (df["montant_cible_gnf"] - capital_actuel).clip(lower=0)
-    df["atteint"]      = capital_actuel >= df["montant_cible_gnf"]
+
+    if "cloture" in df.columns:
+        est_cloture = df["cloture"].astype(str).str.lower() == "true"
+    else:
+        est_cloture = pd.Series(False, index=df.index)
+    capital_gele = pd.to_numeric(df.get("capital_gele_gnf", 0), errors="coerce").fillna(0)
+    df["capital_effectif"] = capital_gele.where(est_cloture, capital_actuel)
+
+    df["progress_pct"] = (df["capital_effectif"] / df["montant_cible_gnf"] * 100).clip(upper=100).round(2)
+    df["reste_gnf"]    = (df["montant_cible_gnf"] - df["capital_effectif"]).clip(lower=0)
+    df["atteint"]      = df["capital_effectif"] >= df["montant_cible_gnf"]
     return df
 
 
@@ -896,15 +909,19 @@ def calculer_effort_objectif(
     effort_hebdomadaire = reste_gnf / semaines_restantes if semaines_restantes > 0 else 0.0
     effort_journalier = reste_gnf / jours_pour_calcul
 
-    # Statut basé sur progression % et jours restants
-    if progress_pct >= 70:
+    # Statut basé sur progression % ET jours restants (l'échéance prime toujours)
+    if jours_restants < 0:
+        statut, couleur = "Échéance dépassée 🔴", "red"
+    elif jours_restants < 30:
+        statut, couleur = "Urgent 🔴", "red"
+    elif progress_pct >= 70 and jours_restants >= 90:
         statut, couleur = "Bien avancé 🟢", "green"
+    elif progress_pct >= 70:
+        statut, couleur = "À accélérer 🟡", "amber"
     elif progress_pct >= 45 and jours_restants >= 90:
         statut, couleur = "En bonne voie 🔵", "blue"
-    elif progress_pct >= 45 and jours_restants < 90:
+    elif progress_pct >= 45:
         statut, couleur = "À surveiller 🟡", "amber"
-    elif jours_restants < 0:
-        statut, couleur = "Échéance dépassée 🔴", "red"
     elif jours_restants < 90:
         statut, couleur = "En retard 🔴", "red"
     else:
@@ -919,6 +936,447 @@ def calculer_effort_objectif(
         "effort_journalier": round(effort_journalier),
         "statut": statut,
         "couleur_statut": couleur,
+    }
+
+
+# ── Paliers de capital — section « Suivi des objectifs » ──────────────────────
+# Logique centralisée pour les 5 paliers fixes (utils.config.PALIERS_CAPITAL) :
+# progression, effort mensuel, date prévisionnelle déduite du rythme réel
+# d'apport, écart planning et statut dynamique. Toutes les fonctions ci-dessous
+# ne font que lire les mouvements existants — aucune valeur n'est inventée.
+
+JOURS_PAR_MOIS = 30.44  # moyenne calendaire, évite le biais des mois à 28-31 jours
+
+# Tolérances (jours) utilisées pour classer l'écart entre la date prévisionnelle
+# et la date cible dans le statut dynamique. Ajustable si le rythme du projet
+# change, sans toucher à la logique de calcul elle-même.
+TOLERANCE_AVANCE_JOURS = 30      # écart ≤ -30 j -> "En avance"
+TOLERANCE_SURVEILLER_JOURS = 90  # écart > 90 j -> "Fort risque de retard"
+
+
+def _statut_reel(atteint: bool, jours_restants: int) -> tuple[str, str] | None:
+    """
+    Statut RÉEL — une situation constatée, jamais une projection.
+      - "Atteint ✅" si le capital réel a atteint la cible.
+      - "Retard 🔴"  UNIQUEMENT si l'échéance est déjà passée (jours_restants < 0)
+        sans que la cible soit atteinte : date_actuelle > date_cible ET
+        capital_reel < cible, exactement comme demandé — jamais avant.
+      - None si l'objectif est encore en cours (avant l'échéance, pas encore
+        atteint) : c'est alors _statut_projection qui prend le relais.
+    """
+    if atteint:
+        return "Atteint ✅", "green"
+    if jours_restants < 0:
+        return "Retard 🔴", "red"
+    return None
+
+
+def _statut_projection(ecart_jours: int | None) -> tuple[str, str]:
+    """
+    Statut de PROJECTION — un risque déduit du rythme réel d'apport, jamais une
+    situation constatée. N'est utilisé que tant que l'échéance n'est pas
+    passée et que la cible n'est pas atteinte (_statut_reel renvoie None).
+    "Fort risque de retard" reste une projection : ce n'est PAS "Retard", qui
+    ne s'applique qu'après l'échéance réellement dépassée.
+    """
+    if ecart_jours is None:
+        return "Prévision indisponible", "amber"
+    if ecart_jours <= -TOLERANCE_AVANCE_JOURS:
+        return "En avance 🟢", "green"
+    if ecart_jours <= TOLERANCE_AVANCE_JOURS:
+        return "Dans le rythme 🟡", "blue"
+    if ecart_jours <= TOLERANCE_SURVEILLER_JOURS:
+        return "Risque de retard 🟠", "amber"
+    return "Fort risque de retard 🔴", "red"
+
+
+def apport_moyen_mensuel(df_mvt: pd.DataFrame, mois_recul: int = 3) -> float | None:
+    """
+    Moyenne mensuelle des apports réellement enregistrés, sur les derniers
+    `mois_recul` mois calendaires où au moins un apport existe.
+    Renvoie None si aucune donnée fiable n'est disponible (jamais de valeur
+    inventée) — à afficher comme "Prévision indisponible" côté UI.
+    """
+    df = _mouvements_actifs(df_mvt)
+    if df.empty or "type_mouvement" not in df.columns:
+        return None
+    df = df[df["type_mouvement"].astype(str).str.lower() == "apport"].copy()
+    if df.empty:
+        return None
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+    if df.empty:
+        return None
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0.0)
+    par_mois = df.groupby(df["date"].dt.to_period("M"))["montant_converti_gnf"].sum().sort_index()
+    par_mois = par_mois.tail(mois_recul)
+    if par_mois.empty:
+        return None
+    moyenne = float(par_mois.mean())
+    return moyenne if moyenne > 0 else None
+
+
+def date_atteinte_palier(
+    df_mvt: pd.DataFrame, df_comptes: pd.DataFrame | None, montant_cible: float
+) -> date | None:
+    """
+    Date réelle à laquelle le capital cumulé a franchi `montant_cible`, déduite
+    de l'historique des mouvements. None si l'historique ne permet pas de la
+    déterminer (jamais de date inventée).
+    """
+    hist = evolution_capital(df_mvt, df_comptes)
+    if hist is None or hist.empty:
+        return None
+    atteints = hist[hist["capital_cumule"] >= montant_cible]
+    if atteints.empty:
+        return None
+    return pd.Timestamp(atteints.iloc[0]["date"]).date()
+
+
+def calculer_palier(
+    capital_actuel: float,
+    montant_cible: float,
+    date_cible: str,
+    apport_mensuel: float | None,
+    apports_prevus_mois: float = 0.0,
+) -> dict:
+    """
+    Calcule tous les indicateurs d'un palier de capital.
+
+    - progress_pct / reste_gnf : progression brute capital_actuel vs cible.
+    - effort_mensuel / effort_mode : l'indicateur d'effort change de forme
+      selon la proximité de l'échéance (un taux "par mois" n'a aucun sens à
+      quelques jours de la cible) :
+        * jours_restants >= 30  -> effort_mode="mensuel", effort_mensuel = reste / mois_restants
+        * 1 <= jours_restants < 30 -> effort_mode="avant_echeance" (effort_mensuel=None, utiliser reste_gnf)
+        * jours_restants == 0   -> effort_mode="aujourdhui" (effort_mensuel=None, utiliser reste_gnf)
+        * jours_restants < 0, non atteint -> effort_mode="depasse" (effort_mensuel=None, utiliser reste_gnf)
+        * atteint -> effort_mode="atteint"
+    - date_previsionnelle : projetée à partir du rythme réel d'apport
+      (apport_mensuel). None si ce rythme est inconnu — jamais inventée.
+    - ecart_planning_jours : (date_previsionnelle - date_cible), positif =
+      retard prévu, négatif = avance prévue sur le planning.
+    - statut/couleur_statut : classement dynamique combinant l'atteinte, le
+      dépassement d'échéance et l'écart de planning.
+    """
+    cible = float(montant_cible) if montant_cible else 0.0
+    capital = float(capital_actuel) if capital_actuel else 0.0
+    reste = max(0.0, cible - capital)
+    progress_pct = min((capital / cible * 100) if cible > 0 else 0.0, 100.0)
+    atteint = cible > 0 and capital >= cible
+
+    try:
+        dc = pd.Timestamp(date_cible).date()
+        jours_restants = (dc - date.today()).days
+    except Exception:
+        dc = None
+        jours_restants = 0
+
+    # Effort nécessaire pour tenir la date cible — la forme de l'indicateur
+    # dépend de la proximité de l'échéance ("349 M GNF/mois" à J-2 n'a aucun
+    # sens : il ne reste pas un mois entier pour apporter quoi que ce soit).
+    if atteint:
+        effort_mensuel, effort_mode = 0.0, "atteint"
+    elif jours_restants < 0:
+        effort_mensuel, effort_mode = None, "depasse"
+    elif jours_restants == 0:
+        effort_mensuel, effort_mode = None, "aujourdhui"
+    elif jours_restants < 30:
+        effort_mensuel, effort_mode = None, "avant_echeance"
+    else:
+        mois_restants = max(jours_restants / JOURS_PAR_MOIS, 1 / JOURS_PAR_MOIS)
+        effort_mensuel, effort_mode = reste / mois_restants, "mensuel"
+
+    # Date prévisionnelle d'atteinte, déduite du rythme réel d'apport
+    if atteint:
+        date_prev = date.today()
+    elif not apport_mensuel or apport_mensuel <= 0:
+        date_prev = None
+    else:
+        mois_necessaires = reste / apport_mensuel
+        date_prev = date.today() + timedelta(days=mois_necessaires * JOURS_PAR_MOIS)
+
+    # Écart planning : positif = projection après la cible (retard)
+    ecart_jours = (date_prev - dc).days if (dc is not None and date_prev is not None) else None
+
+    capital_prevu_fin_mois = capital + float(apports_prevus_mois or 0.0)
+
+    # Statut affiché = statut RÉEL (constaté) s'il y en a un (atteint, ou
+    # échéance réellement dépassée) ; sinon statut de PROJECTION (un risque,
+    # jamais une lateness constatée) déduit de l'écart avec le rythme réel.
+    statut, couleur = _statut_reel(atteint, jours_restants) or _statut_projection(ecart_jours)
+
+    return {
+        "capital_actuel": capital,
+        "montant_cible": cible,
+        "progress_pct": round(progress_pct, 2),
+        "reste_gnf": reste,
+        "atteint": atteint,
+        "date_cible": dc,
+        "jours_restants": jours_restants,
+        "date_previsionnelle": date_prev,
+        "apport_mensuel_moyen": apport_mensuel,
+        "effort_mensuel": effort_mensuel,
+        "effort_mode": effort_mode,
+        "apports_prevus_mois": float(apports_prevus_mois or 0.0),
+        "capital_prevu_fin_mois": capital_prevu_fin_mois,
+        "ecart_planning_jours": ecart_jours,
+        "statut": statut,
+        "couleur_statut": couleur,
+    }
+
+
+# ── Plan d'apports prévisionnels — projection distincte du capital réel ───────
+# Module 100% GNF : aucune devise étrangère, aucun taux de change, aucune
+# conversion. Tout ce bloc lit le capital réel (calculer_capital_total,
+# calculer_palier — jamais modifiés ici) et un plan d'apports séparé, déjà
+# exprimé en GNF, pour SIMULER une trajectoire. Aucune fonction ci-dessous
+# n'écrit de mouvement ni ne modifie le capital réel : le plan reste un
+# calcul en lecture seule, à côté.
+#
+# Anti double-comptage : seuls les mois STRICTEMENT postérieurs au mois
+# courant sont sommés comme "apports futurs". Le mois en cours et les mois
+# passés sont exclus de la projection — s'ils ont réellement été apportés,
+# c'est déjà dans capital_reel_actuel ; sinon, les reprojeter romprait la
+# séparation réel/prévisionnel (cf. calculer_palier pour le "réel").
+
+TOLERANCE_PLAN_AVANCE = 30       # date du plan ≥ 30 j avant la cible -> "En avance selon le plan"
+TOLERANCE_PLAN_PROCHE = 45       # jusqu'à 45 j après la cible -> "Très proche de l'objectif"
+TOLERANCE_PLAN_SURVEILLER = 90   # jusqu'à 90 j après la cible -> "À surveiller"
+TOLERANCE_CONFORME_GNF = 1.0     # écart absolu (GNF) toléré comme "Conforme" — absorbe l'arrondi flottant, rien de plus
+
+
+def _mois_period(valeur) -> "pd.Period | None":
+    """Convertit une date/chaîne quelconque en période mensuelle. None si invalide."""
+    try:
+        ts = pd.Timestamp(valeur)
+        if pd.isna(ts):
+            return None
+        return ts.to_period("M")
+    except Exception:
+        return None
+
+
+def _plan_futur(df_plan: pd.DataFrame, aujourdhui: date | None = None) -> pd.DataFrame:
+    """
+    Lignes du plan (montants en GNF) dont le mois est strictement postérieur
+    au mois courant, triées chronologiquement. C'est la seule porte d'entrée
+    du plan vers les calculs de projection — elle exclut mécaniquement le
+    mois en cours et le passé, ce qui empêche tout double-comptage avec le
+    capital réel.
+    """
+    aujourdhui = aujourdhui or date.today()
+    auj_periode = pd.Timestamp(aujourdhui).to_period("M")
+    cols = ["mois_periode", "montant_prevu_gnf"]
+    if df_plan is None or df_plan.empty:
+        return pd.DataFrame(columns=cols)
+    df = df_plan.copy()
+    df["mois_periode"] = df["mois"].apply(_mois_period)
+    df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
+    df = df.dropna(subset=["mois_periode"])
+    df = df[df["mois_periode"] > auj_periode]
+    return df.sort_values("mois_periode")
+
+
+def capital_previsionnel_a_date(
+    capital_reel_actuel: float,
+    df_plan: pd.DataFrame,
+    date_limite,
+    aujourdhui: date | None = None,
+) -> float:
+    """
+    capital_previsionnel = capital_reel_actuel + somme des apports FUTURS
+    planifiés en GNF (mois > mois courant) jusqu'à `date_limite` inclus.
+    Aucune conversion de devise : le plan est déjà exprimé en GNF. Ne modifie
+    jamais capital_reel_actuel.
+    """
+    limite_periode = _mois_period(date_limite)
+    futur = _plan_futur(df_plan, aujourdhui)
+    if limite_periode is not None:
+        futur = futur[futur["mois_periode"] <= limite_periode]
+    somme_gnf = float(futur["montant_prevu_gnf"].sum()) if not futur.empty else 0.0
+    return float(capital_reel_actuel) + somme_gnf
+
+
+def date_selon_plan(
+    capital_reel_actuel: float,
+    montant_cible: float,
+    df_plan: pd.DataFrame,
+    aujourdhui: date | None = None,
+) -> date | None:
+    """
+    Première date (premier jour du mois planifié) où le capital simulé —
+    capital réel actuel + cumul chronologique des apports GNF futurs
+    planifiés — franchit `montant_cible`. None si le planning actuel ne
+    permet jamais de l'atteindre : jamais de date inventée ("Non atteint
+    avec le planning actuel" côté UI).
+    """
+    if capital_reel_actuel >= montant_cible:
+        return aujourdhui or date.today()
+    futur = _plan_futur(df_plan, aujourdhui)
+    cumul = float(capital_reel_actuel)
+    for _, ligne in futur.iterrows():
+        cumul += float(ligne["montant_prevu_gnf"])
+        if cumul >= montant_cible:
+            return ligne["mois_periode"].to_timestamp().date()
+    return None
+
+
+def calculer_projection_plan(
+    capital_reel_actuel: float,
+    montant_cible: float,
+    date_cible,
+    df_plan: pd.DataFrame,
+    aujourdhui: date | None = None,
+) -> dict:
+    """
+    Projection d'un palier SELON LE PLAN PERSONNEL (100% GNF) — strictement
+    distincte de calculer_palier (rythme réel), jamais utilisée pour décider
+    du statut réel "Atteint". Ne fait aucune écriture : simulation en lecture
+    seule, aucune notion de devise étrangère.
+    """
+    try:
+        dc = pd.Timestamp(date_cible).date()
+    except Exception:
+        dc = None
+
+    capital_prevu_echeance = capital_previsionnel_a_date(
+        capital_reel_actuel, df_plan, dc if dc is not None else date_cible, aujourdhui,
+    )
+    ecart_capital = capital_prevu_echeance - float(montant_cible)
+    date_plan = date_selon_plan(capital_reel_actuel, montant_cible, df_plan, aujourdhui)
+
+    # Apports prévus (GNF) avant/à l'échéance, et couverture du reste réel par
+    # ce seul planning — ecart_capital équivaut exactement à
+    # (apports_prevus_avant_echeance - reste), donc jamais recalculé deux fois.
+    reste_reel = max(0.0, float(montant_cible) - float(capital_reel_actuel))
+    apports_prevus_avant_echeance = capital_prevu_echeance - float(capital_reel_actuel)
+    # Plafonnée à 100% comme la barre de progression : au-delà, l'excédent est
+    # déjà visible dans "Marge prévisionnelle", pas besoin d'un % à rallonge.
+    couverture_plan_pct = min(apports_prevus_avant_echeance / reste_reel * 100, 100.0) if reste_reel > 0 else None
+
+    if date_plan is None:
+        statut, couleur = "Non atteint selon le plan 🔴", "red"
+    elif dc is None:
+        statut, couleur = "À surveiller 🟠", "amber"
+    else:
+        ecart_jours = (date_plan - dc).days
+        if ecart_jours <= -TOLERANCE_PLAN_AVANCE:
+            statut, couleur = "En avance selon le plan 🟢", "green"
+        elif ecart_jours <= TOLERANCE_PLAN_AVANCE:
+            statut, couleur = "Objectif atteint selon le plan ✅", "green"
+        elif ecart_jours <= TOLERANCE_PLAN_PROCHE:
+            statut, couleur = "Très proche de l'objectif 🟡", "blue"
+        elif ecart_jours <= TOLERANCE_PLAN_SURVEILLER:
+            statut, couleur = "À surveiller 🟠", "amber"
+        else:
+            statut, couleur = "Non atteint selon le plan 🔴", "red"
+
+    return {
+        "date_selon_plan": date_plan,
+        "capital_prevu_echeance": capital_prevu_echeance,
+        "ecart_capital_planning": ecart_capital,
+        "apports_prevus_avant_echeance": apports_prevus_avant_echeance,
+        "couverture_plan_pct": couverture_plan_pct,
+        "statut_plan": statut,
+        "couleur_statut_plan": couleur,
+    }
+
+
+def total_apports_reels(df_mvt: pd.DataFrame) -> float:
+    """Somme brute (GNF) de tous les vrais apports enregistrés, jamais le plan."""
+    df = _mouvements_actifs(df_mvt)
+    if df.empty:
+        return 0.0
+    df = df[df["type_mouvement"].astype(str).str.lower() == "apport"]
+    return float(pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0.0).sum())
+
+
+def realise_par_mois(df_mvt: pd.DataFrame) -> pd.Series:
+    """Total des vrais apports (GNF) groupés par mois calendaire (index = pd.Period 'M')."""
+    df = _mouvements_actifs(df_mvt)
+    if df.empty:
+        return pd.Series(dtype=float)
+    df = df[df["type_mouvement"].astype(str).str.lower() == "apport"].copy()
+    if df.empty:
+        return pd.Series(dtype=float)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+    if df.empty:
+        return pd.Series(dtype=float)
+    df["montant_converti_gnf"] = pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0.0)
+    return df.groupby(df["date"].dt.to_period("M"))["montant_converti_gnf"].sum()
+
+
+# Couleur de badge associée à chaque statut mensuel (cohérent avec les autres
+# badges de statut de la page — mêmes 4 couleurs terre/brun existantes).
+COULEUR_STATUT_APPORT = {
+    "⏳ À venir":      "slate",
+    "✅ Conforme":     "green",
+    "🟠 Partiel":      "amber",
+    "🟢 Dépassé":      "green",
+    "🔴 Non réalisé":  "red",
+}
+
+
+def statut_apport_mensuel(
+    mois, montant_prevu_gnf: float, montant_reel_gnf: float, aujourdhui: date | None = None,
+) -> str:
+    """
+    Statut d'un apport mensuel planifié, comparé au réel du même mois calendaire :
+      - "⏳ À venir"     : mois futur (ou en cours) sans rien reçu pour l'instant.
+      - "🔴 Non réalisé" : mois déjà passé, rien reçu.
+      - "✅ Conforme"    : réel == prévu (à TOLERANCE_CONFORME_GNF près, pur arrondi flottant).
+      - "🟠 Partiel"     : réel < prévu, même de peu — aucune tolérance de pourcentage.
+      - "🟢 Dépassé"     : réel > prévu, ou réel reçu sans rien de prévu.
+    """
+    aujourdhui = aujourdhui or date.today()
+    mois_periode = _mois_period(mois)
+    auj_periode = pd.Timestamp(aujourdhui).to_period("M")
+
+    if montant_reel_gnf <= 0:
+        if mois_periode is not None and mois_periode < auj_periode:
+            return "🔴 Non réalisé"
+        return "⏳ À venir"
+
+    if montant_prevu_gnf <= 0:
+        return "🟢 Dépassé"
+
+    if abs(montant_reel_gnf - montant_prevu_gnf) <= TOLERANCE_CONFORME_GNF:
+        return "✅ Conforme"
+    return "🟠 Partiel" if montant_reel_gnf < montant_prevu_gnf else "🟢 Dépassé"
+
+
+def synthese_plan_vs_reel(
+    df_plan: pd.DataFrame, df_mvt: pd.DataFrame, aujourdhui: date | None = None,
+) -> dict:
+    """
+    Compare, sur les mois déjà échus uniquement, le plan (GNF) et la réalité.
+    taux_realisation = apports_reels / apports_prevus_echus * 100.
+    Les mois non échus ne comptent jamais dans "prévu échu" (sinon un planning
+    tout juste commencé serait pénalisé pour des mois qui n'ont pas eu lieu).
+    """
+    aujourdhui = aujourdhui or date.today()
+    auj_periode = pd.Timestamp(aujourdhui).to_period("M")
+
+    if df_plan is None or df_plan.empty:
+        prevu_echu_gnf = 0.0
+    else:
+        df = df_plan.copy()
+        df["mois_periode"] = df["mois"].apply(_mois_period)
+        df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
+        echus = df[df["mois_periode"].notna() & (df["mois_periode"] <= auj_periode)]
+        prevu_echu_gnf = float(echus["montant_prevu_gnf"].sum())
+
+    reel_gnf = total_apports_reels(df_mvt)
+    ecart = reel_gnf - prevu_echu_gnf
+    taux_realisation = (reel_gnf / prevu_echu_gnf * 100) if prevu_echu_gnf > 0 else None
+
+    return {
+        "prevu_echu_gnf": prevu_echu_gnf,
+        "reel_gnf": reel_gnf,
+        "ecart_gnf": ecart,
+        "taux_realisation_pct": round(taux_realisation, 1) if taux_realisation is not None else None,
     }
 
 
