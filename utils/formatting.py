@@ -69,6 +69,26 @@ def fmt_date_fr(valeur) -> str:
         return "—"
 
 
+def fmt_jours_restants(jours_restants: int, atteint: bool = False, date_atteinte=None) -> str:
+    """
+    Formate le compte à rebours vers une date cible. `jours_restants` doit
+    être calculé à partir de la date du jour réelle (jamais codée en dur) —
+    voir calculer_palier(). Recalculé automatiquement à chaque appel puisqu'il
+    dépend uniquement de la valeur passée, elle-même dérivée de date.today().
+    """
+    if atteint:
+        if date_atteinte:
+            return f"✅ Objectif atteint le {fmt_date_fr(date_atteinte)}"
+        return "✅ Objectif atteint"
+    if jours_restants > 1:
+        return f"{jours_restants} jours restants"
+    if jours_restants == 1:
+        return "1 jour restant"
+    if jours_restants == 0:
+        return "Échéance aujourd'hui"
+    return f"Échéance dépassée de {abs(jours_restants)} jours"
+
+
 def fmt_taux(taux: float) -> str:
     try:
         v = int(taux)

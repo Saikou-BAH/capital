@@ -1140,10 +1140,33 @@ def calculer_palier(
 # c'est déjà dans capital_reel_actuel ; sinon, les reprojeter romprait la
 # séparation réel/prévisionnel (cf. calculer_palier pour le "réel").
 
-TOLERANCE_PLAN_AVANCE = 30       # date du plan ≥ 30 j avant la cible -> "En avance selon le plan"
-TOLERANCE_PLAN_PROCHE = 45       # jusqu'à 45 j après la cible -> "Très proche de l'objectif"
-TOLERANCE_PLAN_SURVEILLER = 90   # jusqu'à 90 j après la cible -> "À surveiller"
 TOLERANCE_CONFORME_GNF = 1.0     # écart absolu (GNF) toléré comme "Conforme" — absorbe l'arrondi flottant, rien de plus
+
+
+def _statut_du_plan(date_plan: date | None, date_cible: date | None) -> tuple[str, str, int | None]:
+    """
+    Statut du PLAN personnel — priorité stricte à la date d'atteinte projetée
+    par le planning, jamais au pourcentage de couverture (un manque de 1% qui
+    décale l'atteinte au mois suivant reste un retard prévu, pas "presque bon").
+    Centralisée ici : les 5 paliers appellent cette unique fonction, jamais de
+    règle différente selon la carte.
+      - date_cible inconnue         -> "À surveiller 🟠" (repère indisponible)
+      - date_plan is None           -> "Non atteint avec le planning actuel 🔴"
+      - date_plan < date_cible      -> "En avance selon le plan 🟢"
+      - date_plan == date_cible     -> "Objectif atteint selon le plan ✅"
+      - date_plan > date_cible      -> "Retard prévu selon le plan 🔴"
+    Renvoie aussi l'écart en jours (date_plan - date_cible, None si non calculable).
+    """
+    if date_cible is None:
+        return "À surveiller 🟠", "amber", None
+    if date_plan is None:
+        return "Non atteint avec le planning actuel 🔴", "red", None
+    ecart = (date_plan - date_cible).days
+    if ecart < 0:
+        return "En avance selon le plan 🟢", "green", ecart
+    if ecart == 0:
+        return "Objectif atteint selon le plan ✅", "green", ecart
+    return "Retard prévu selon le plan 🔴", "red", ecart
 
 
 def _mois_period(valeur) -> "pd.Period | None":
@@ -1255,27 +1278,13 @@ def calculer_projection_plan(
     # déjà visible dans "Marge prévisionnelle", pas besoin d'un % à rallonge.
     couverture_plan_pct = min(apports_prevus_avant_echeance / reste_reel * 100, 100.0) if reste_reel > 0 else None
 
-    if date_plan is None:
-        statut, couleur = "Non atteint selon le plan 🔴", "red"
-    elif dc is None:
-        statut, couleur = "À surveiller 🟠", "amber"
-    else:
-        ecart_jours = (date_plan - dc).days
-        if ecart_jours <= -TOLERANCE_PLAN_AVANCE:
-            statut, couleur = "En avance selon le plan 🟢", "green"
-        elif ecart_jours <= TOLERANCE_PLAN_AVANCE:
-            statut, couleur = "Objectif atteint selon le plan ✅", "green"
-        elif ecart_jours <= TOLERANCE_PLAN_PROCHE:
-            statut, couleur = "Très proche de l'objectif 🟡", "blue"
-        elif ecart_jours <= TOLERANCE_PLAN_SURVEILLER:
-            statut, couleur = "À surveiller 🟠", "amber"
-        else:
-            statut, couleur = "Non atteint selon le plan 🔴", "red"
+    statut, couleur, ecart_plan_jours = _statut_du_plan(date_plan, dc)
 
     return {
         "date_selon_plan": date_plan,
         "capital_prevu_echeance": capital_prevu_echeance,
         "ecart_capital_planning": ecart_capital,
+        "ecart_plan_jours": ecart_plan_jours,
         "apports_prevus_avant_echeance": apports_prevus_avant_echeance,
         "couverture_plan_pct": couverture_plan_pct,
         "statut_plan": statut,
@@ -1371,13 +1380,195 @@ def synthese_plan_vs_reel(
     reel_gnf = total_apports_reels(df_mvt)
     ecart = reel_gnf - prevu_echu_gnf
     taux_realisation = (reel_gnf / prevu_echu_gnf * 100) if prevu_echu_gnf > 0 else None
+    statut, couleur = _statut_prevu_vs_reel(ecart, prevu_echu_gnf)
 
     return {
         "prevu_echu_gnf": prevu_echu_gnf,
         "reel_gnf": reel_gnf,
         "ecart_gnf": ecart,
         "taux_realisation_pct": round(taux_realisation, 1) if taux_realisation is not None else None,
+        "statut": statut,
+        "couleur_statut": couleur,
     }
+
+
+SEUIL_ECART_IMPORTANT_PCT = 20.0  # |écart| > 20% du prévu échu -> "Écart important"
+
+
+def _statut_prevu_vs_reel(ecart_gnf: float, prevu_echu_gnf: float) -> tuple[str, str]:
+    """Statut du respect du planning à ce jour — centralisé pour la synthèse et le résumé en tête de page."""
+    if prevu_echu_gnf <= 0:
+        return "Aucun apport prévu arrivé à échéance", "slate"
+    if ecart_gnf == 0:
+        return "✅ Plan respecté", "green"
+    if ecart_gnf > 0:
+        return "🟢 En avance sur les apports", "green"
+    ecart_pct = abs(ecart_gnf) / prevu_echu_gnf * 100
+    if ecart_pct > SEUIL_ECART_IMPORTANT_PCT:
+        return "🔴 Écart important", "red"
+    return "🟠 En dessous du plan", "amber"
+
+
+# ── Trajectoire idéale ──────────────────────────────────────────────────────────
+# Où le capital DEVRAIT être aujourd'hui pour progresser régulièrement (ligne
+# droite dans le temps) entre le début et la cible d'un palier. Strictement
+# différente de la projection "rythme réel" (calculer_palier) et de la
+# projection "selon mon plan" (calculer_projection_plan) : trois informations
+# distinctes, jamais mélangées.
+
+SEUIL_TRAJECTOIRE_PROCHE_PCT = 3.0     # |écart| <= 3% du capital idéal -> "Proche de la trajectoire"
+SEUIL_TRAJECTOIRE_IMPORTANT_PCT = 15.0  # écart < -15% -> "Très en dessous"
+
+
+def capital_trajectoire_ideale(
+    capital_reel: float,
+    capital_depart: float,
+    date_depart,
+    montant_cible: float,
+    date_cible,
+    aujourdhui: date | None = None,
+) -> dict | None:
+    """
+    Progression linéaire attendue entre (date_depart, capital_depart) et
+    (date_cible, montant_cible). None si date_depart/date_cible sont invalides
+    ou égales (aucune trajectoire inventée sans deux points de repère réels).
+
+        progression_temps = clip((aujourd'hui - date_depart) / (date_cible - date_depart), 0, 1)
+        capital_ideal      = capital_depart + progression_temps * (cible - capital_depart)
+        ecart_trajectoire  = capital_reel - capital_ideal
+    """
+    aujourdhui = aujourdhui or date.today()
+    try:
+        dd = pd.Timestamp(date_depart).date()
+        dc = pd.Timestamp(date_cible).date()
+    except Exception:
+        return None
+    duree_totale = (dc - dd).days
+    if duree_totale <= 0:
+        return None
+
+    progression_temps = min(max((aujourdhui - dd).days / duree_totale, 0.0), 1.0)
+    capital_ideal = float(capital_depart) + progression_temps * (float(montant_cible) - float(capital_depart))
+    ecart_trajectoire = float(capital_reel) - capital_ideal
+    ecart_pct = (ecart_trajectoire / capital_ideal * 100) if capital_ideal > 0 else 0.0
+
+    if ecart_trajectoire >= 0:
+        statut, couleur = "Au-dessus de la trajectoire 🟢", "green"
+    elif abs(ecart_pct) <= SEUIL_TRAJECTOIRE_PROCHE_PCT:
+        statut, couleur = "Proche de la trajectoire 🟡", "blue"
+    elif abs(ecart_pct) <= SEUIL_TRAJECTOIRE_IMPORTANT_PCT:
+        statut, couleur = "Sous la trajectoire 🟠", "amber"
+    else:
+        statut, couleur = "Très en dessous de la trajectoire 🔴", "red"
+
+    return {
+        "capital_ideal": capital_ideal,
+        "ecart_trajectoire": ecart_trajectoire,
+        "ecart_trajectoire_pct": round(ecart_pct, 1),
+        "progression_temps_pct": round(progression_temps * 100, 1),
+        "statut": statut,
+        "couleur_statut": couleur,
+    }
+
+
+def trajectoire_ideale_palier(
+    capital_reel: float, paliers: list[dict], index_palier: int, aujourdhui: date | None = None,
+) -> dict | None:
+    """
+    Trajectoire idéale d'un palier de `utils.config.PALIERS_CAPITAL`, en
+    dérivant capital_depart/date_depart du palier PRÉCÉDENT (montant_cible_gnf
+    et date_cible), jamais inventés. None pour le premier palier (index 0) :
+    aucun point de départ défini n'existe avant lui — on ne l'invente pas.
+    """
+    if index_palier <= 0 or index_palier >= len(paliers):
+        return None
+    precedent = paliers[index_palier - 1]
+    courant = paliers[index_palier]
+    return capital_trajectoire_ideale(
+        capital_reel,
+        precedent["montant_cible_gnf"], precedent["date_cible"],
+        courant["montant_cible_gnf"], courant["date_cible"],
+        aujourdhui,
+    )
+
+
+# ── Prochain apport prévu ────────────────────────────────────────────────────
+
+def prochain_apport_prevu(df_plan: pd.DataFrame, aujourdhui: date | None = None) -> dict | None:
+    """
+    Premier apport planifié dont le mois est >= aujourd'hui. None si aucun
+    apport futur n'existe dans le plan — jamais un apport inventé.
+    """
+    aujourdhui = aujourdhui or date.today()
+    if df_plan is None or df_plan.empty:
+        return None
+    df = df_plan.copy()
+    df["mois_periode"] = df["mois"].apply(_mois_period)
+    df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
+    df = df.dropna(subset=["mois_periode"])
+    auj_periode = pd.Timestamp(aujourdhui).to_period("M")
+    futurs = df[df["mois_periode"] >= auj_periode].sort_values("mois_periode")
+    if futurs.empty:
+        return None
+    ligne = futurs.iloc[0]
+    date_apport = ligne["mois_periode"].to_timestamp().date()
+    jours_avant = (date_apport - aujourdhui).days
+    return {
+        "date": date_apport,
+        "montant_gnf": float(ligne["montant_prevu_gnf"]),
+        "jours_avant": jours_avant,
+    }
+
+
+# ── Ajustement nécessaire pour tenir le plan ──────────────────────────────────
+
+def montant_ajustement_necessaire(ecart_capital_planning: float) -> float:
+    """
+    Montant à ajouter au planning avant la date cible pour que le plan couvre
+    la cible. 0.0 si le plan couvre déjà l'objectif (ecart_capital_planning >= 0).
+    """
+    return max(0.0, -float(ecart_capital_planning))
+
+
+# ── Simulateur de scénarios (en mémoire, jamais écrit sur le vrai plan) ───────
+
+def appliquer_scenario_plan(
+    df_plan: pd.DataFrame,
+    type_scenario: str,
+    plan_id: str | None = None,
+    nouveau_montant: float | None = None,
+    nouveau_mois: str | None = None,
+) -> pd.DataFrame:
+    """
+    Renvoie une COPIE du plan avec un scénario appliqué — ne modifie jamais
+    `df_plan` en place, n'appelle jamais add/update/delete_plan_apport :
+    aucune écriture, purement une simulation en mémoire.
+
+    type_scenario :
+      - "rater"     : l'apport `plan_id` passe à 0 (non réalisé).
+      - "modifier"  : l'apport `plan_id` prend `nouveau_montant`.
+      - "decaler"   : l'apport `plan_id` est déplacé au mois `nouveau_mois`.
+      - "exceptionnel" : ajoute une nouvelle ligne (nouveau_mois, nouveau_montant),
+        sans toucher aux lignes existantes.
+    """
+    base = df_plan.copy() if df_plan is not None and not df_plan.empty else pd.DataFrame(
+        columns=["id", "mois", "montant_prevu_gnf", "date_creation"]
+    )
+
+    if type_scenario == "rater" and plan_id is not None:
+        base.loc[base["id"] == plan_id, "montant_prevu_gnf"] = 0.0
+    elif type_scenario == "modifier" and plan_id is not None and nouveau_montant is not None:
+        base.loc[base["id"] == plan_id, "montant_prevu_gnf"] = float(nouveau_montant)
+    elif type_scenario == "decaler" and plan_id is not None and nouveau_mois is not None:
+        base.loc[base["id"] == plan_id, "mois"] = nouveau_mois
+    elif type_scenario == "exceptionnel" and nouveau_mois is not None and nouveau_montant is not None:
+        nouvelle_ligne = pd.DataFrame([{
+            "id": "scenario-exceptionnel", "mois": nouveau_mois,
+            "montant_prevu_gnf": float(nouveau_montant), "date_creation": "",
+        }])
+        base = pd.concat([base, nouvelle_ligne], ignore_index=True)
+
+    return base
 
 
 # ── Bilan capital ─────────────────────────────────────────────────────────────
