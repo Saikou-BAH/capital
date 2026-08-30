@@ -189,22 +189,30 @@ with rc3:
 rc4, rc5, rc6 = st.columns(3)
 with rc4:
     if _synth_resume["prevu_echu_gnf"] > 0:
-        _c_prevu = "green" if _synth_resume["ecart_gnf"] >= 0 else ("red" if "important" in _synth_resume["statut"] else "amber")
         st.markdown(kpi_card(
             "Prévu vs réel", fmt_gnf_court(_synth_resume["ecart_gnf"]),
-            sub=_synth_resume["statut"], color=_c_prevu, icon="📉",
+            sub=_synth_resume["statut"], color=_synth_resume["couleur_statut"], icon="📉",
         ), unsafe_allow_html=True)
     else:
-        st.markdown(kpi_card("Prévu vs réel", "—", sub="Aucun apport échu", color="slate", icon="📉"), unsafe_allow_html=True)
+        # Couvre à la fois "planning pas encore commencé" et "aucun plan enregistré"
+        # — jamais un faux écart ni un faux %, le statut précis vient du calcul.
+        st.markdown(kpi_card(
+            "Prévu vs réel", "—", sub=_synth_resume["statut"], color="slate", icon="📉",
+        ), unsafe_allow_html=True)
 with rc5:
     _traj_actif = _pal_actif["trajectoire"] if _pal_actif is not None else None
-    if _traj_actif is not None:
+    if _traj_actif is None:
+        st.markdown(kpi_card("Trajectoire", "Non disponible", sub="Pas de point de départ pour ce palier", color="slate", icon="📍"), unsafe_allow_html=True)
+    elif _traj_actif["pas_commence"]:
+        st.markdown(kpi_card(
+            "Trajectoire", "Pas encore commencée",
+            sub=f"Démarre le {fmt_date_fr(_traj_actif['date_debut'])}", color="slate", icon="📍",
+        ), unsafe_allow_html=True)
+    else:
         st.markdown(kpi_card(
             "Trajectoire", fmt_gnf_court(_traj_actif["ecart_trajectoire"]),
             sub=_traj_actif["statut"], color=_traj_actif["couleur_statut"], icon="📍",
         ), unsafe_allow_html=True)
-    else:
-        st.markdown(kpi_card("Trajectoire", "Non disponible", sub="Pas de point de départ pour ce palier", color="slate", icon="📍"), unsafe_allow_html=True)
 with rc6:
     if _pal_actif is not None and _pal_actif["ajustement_necessaire"] > 0:
         st.markdown(kpi_card(
@@ -315,24 +323,26 @@ for i_pal, calc in enumerate(_paliers_calc):
     )
 
     # ── Trajectoire idéale (ligne droite dans le temps vers ce palier) ─────────
-    # Distincte du rythme réel et du plan : indisponible pour le 1er palier
-    # (aucun point de départ défini, jamais inventé).
+    # Distincte du rythme réel et du plan. 3 états possibles :
+    #   - None            : indisponible (1er palier, aucun point de départ défini, jamais inventé)
+    #   - pas_commence     : la période de CE palier n'a pas encore débuté -> pas de jugement porté
+    #   - normal           : trajectoire calculée et jugée
     _traj = calc["trajectoire"]
     if atteint:
         _traj_html = ""
     elif _traj is None:
         _traj_html = (
-            '<div style="display:flex;gap:1.6rem;margin-top:.6rem;flex-wrap:wrap;padding-top:.6rem;'
-            'border-top:1px dashed #E8E1D6">'
             f'<div><div style="{_lbl_style}">📍 Trajectoire idéale</div>'
-            f'<div style="{_val_style};color:#7F7568">Non disponible (pas de point de départ pour ce palier)</div></div>'
-            "</div>"
+            f'<div style="{_val_style};color:#7F7568">Trajectoire idéale indisponible (pas de point de départ pour ce palier)</div></div>'
+        )
+    elif _traj["pas_commence"]:
+        _traj_html = (
+            f'<div><div style="{_lbl_style}">📍 Trajectoire idéale</div>'
+            f'<div style="{_val_style};color:#7F7568">Pas encore commencée — démarre le {fmt_date_fr(_traj["date_debut"])}</div></div>'
         )
     else:
         _sc_traj, _sbg_traj = _statut_color_map.get(_traj["couleur_statut"], ("#4A4238", "#F5F1EA"))
         _traj_html = (
-            '<div style="display:flex;gap:1.6rem;margin-top:.6rem;flex-wrap:wrap;padding-top:.6rem;'
-            'border-top:1px dashed #E8E1D6">'
             f'<div><div style="{_lbl_style}">📍 Capital attendu aujourd\'hui</div><div style="{_val_style}">{fmt_gnf(_traj["capital_ideal"])}</div></div>'
             f'<div><div style="{_lbl_style}">Écart de trajectoire</div>'
             f'<div style="{_val_style};color:{"#3E7C51" if _traj["ecart_trajectoire"] >= 0 else "#B3432F"}">'
@@ -340,10 +350,9 @@ for i_pal, calc in enumerate(_paliers_calc):
             f'<div><div style="{_lbl_style}">Statut trajectoire</div><div>'
             f'<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;'
             f'background:{_sbg_traj};color:{_sc_traj};display:inline-block">{_traj["statut"]}</span></div></div>'
-            "</div>"
         )
 
-    # ── Ajustement nécessaire — masqué si le plan couvre déjà l'objectif ───────
+    # ── Alertes qui restent TOUJOURS visibles, même si le détail est replié ────
     _ajustement = calc["ajustement_necessaire"]
     if atteint or _ajustement <= 0:
         _ajustement_html = ""
@@ -356,6 +365,18 @@ for i_pal, calc in enumerate(_paliers_calc):
             f'<strong>{fmt_date_fr(calc["date_cible"])}</strong> pour remettre ce palier dans les temps selon votre plan.</div>'
             "</div>"
         )
+
+    # Un statut du plan défavorable (retard prévu, planning insuffisant) reste
+    # visible directement sur la carte, même si le détail complet est replié.
+    if not atteint and calc["couleur_statut_plan"] == "red":
+        _statut_plan_alert_html = (
+            '<div style="margin-top:.5rem;padding:.5rem .8rem;border-radius:8px;'
+            'background:#FBEEEA;border:1px solid #E8C4BB;font-size:.8rem;font-weight:600;color:#991b1b">'
+            f'{calc["statut_plan"]} (selon mon plan)'
+            "</div>"
+        )
+    else:
+        _statut_plan_alert_html = ""
 
     # Palier atteint : reste élégant mais plus discret. Palier actif : légèrement mis en avant.
     if atteint:
@@ -370,6 +391,7 @@ for i_pal, calc in enumerate(_paliers_calc):
         if est_actif else ""
     )
 
+    # ── Carte principale : uniquement les informations les plus importantes ────
     _card_html = (
         f'<div class="obj-card" style="{_card_style}">'
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">'
@@ -392,19 +414,27 @@ for i_pal, calc in enumerate(_paliers_calc):
         f'<div><div style="{_lbl_style}">⏳ Jours restants</div><div style="{_val_style}">'
         f'{fmt_jours_restants(calc["jours_restants"], atteint, calc["date_atteinte"])}</div></div>'
         f'<div><div style="{_lbl_style}">📈 Selon rythme réel</div><div style="{_val_style}">{_date_prev_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">📅 Selon mon plan</div><div style="{_val_style}">{_date_plan_txt}</div></div>'
+        f'<div><div style="{_lbl_style}">{_effort_label}</div><div style="{_val_style}">{_effort_txt}</div></div>'
+        "</div>"
+        + _ajustement_html
+        + _statut_plan_alert_html
+        + "</div>"
+    )
+
+    # ── Détails secondaires — repliés dans un expander, rien n'est supprimé ────
+    _details_html = (
+        '<div style="display:flex;gap:1.6rem;flex-wrap:wrap">'
         f'<div><div style="{_lbl_style}">Apport moyen mensuel (réel)</div><div style="{_val_style}">{_apport_moy_txt}</div></div>'
         f'<div><div style="{_lbl_style}">Apports prévus ce mois</div>'
         f'<div style="{_val_style}">{fmt_gnf(calc["apports_prevus_mois"])}</div></div>'
         f'<div><div style="{_lbl_style}">Capital prévu fin de mois</div>'
         f'<div style="{_val_style}">{fmt_gnf(calc["capital_prevu_fin_mois"])}</div></div>'
-        f'<div><div style="{_lbl_style}">{_effort_label}</div><div style="{_val_style}">{_effort_txt}</div></div>'
         f'<div><div style="{_lbl_style}">Écart prévisionnel (rythme réel)</div><div style="{_val_style}">{_ecart_txt}</div>'
         + (f'<div style="font-size:.68rem;color:#7F7568;margin-top:.15rem;max-width:220px">{_ecart_sous_texte}</div>' if _ecart_sous_texte else "")
         + '</div>'
         "</div>"
-        '<div style="display:flex;gap:1.6rem;margin-top:.6rem;flex-wrap:wrap;padding-top:.6rem;'
-        'border-top:1px dashed #E8E1D6">'
-        f'<div><div style="{_lbl_style}">📅 Selon mon plan</div><div style="{_val_style}">{_date_plan_txt}</div></div>'
+        '<div style="display:flex;gap:1.6rem;margin-top:.7rem;flex-wrap:wrap;padding-top:.7rem;border-top:1px dashed #E8E1D6">'
         f'<div><div style="{_lbl_style}">💰 Capital prévu à échéance</div><div style="{_val_style}">{fmt_gnf(calc["capital_prevu_echeance"])}</div></div>'
         f'<div><div style="{_lbl_style}">📅 Apports prévus avant échéance</div><div style="{_val_style}">{_apports_avant_txt}</div></div>'
         f'<div><div style="{_lbl_style}">Couverture du reste par le plan</div><div style="{_val_style}">{_couverture_txt}</div></div>'
@@ -413,14 +443,16 @@ for i_pal, calc in enumerate(_paliers_calc):
         f'<div style="{_val_style};color:{_marge_color}">{_marge_txt}</div></div>'
         f'<div><div style="{_lbl_style}">Statut du plan</div><div>{_badge_statut_plan}</div></div>'
         "</div>"
-        + _traj_html
-        + _ajustement_html
-        + "</div>"
+        '<div style="display:flex;gap:1.6rem;margin-top:.7rem;flex-wrap:wrap;padding-top:.7rem;border-top:1px dashed #E8E1D6">'
+        + _traj_html +
+        "</div>"
     )
 
     col_info, col_gauge = st.columns([3, 1])
     with col_info:
         st.markdown(_card_html, unsafe_allow_html=True)
+        with st.expander("Voir les détails", expanded=False):
+            st.markdown(_details_html, unsafe_allow_html=True)
     with col_gauge:
         st.markdown(spacer("0.5rem"), unsafe_allow_html=True)
         st.markdown('<div class="card" style="padding:.25rem">', unsafe_allow_html=True)
@@ -460,6 +492,13 @@ with sc3:
 with sc4:
     _txt_real = f"{_synth['taux_realisation_pct']:.1f} %" if _synth["taux_realisation_pct"] is not None else "—"
     st.markdown(kpi_card("Taux de réalisation", _txt_real, icon="📊", color="amber"), unsafe_allow_html=True)
+
+# Période EXACTE comparée — jamais le capital accumulé avant le début du plan.
+if _synth["date_debut_plan"] is not None:
+    st.caption(
+        f"Comparaison sur la période du {fmt_date_fr(_synth['date_debut_plan'])} à aujourd'hui uniquement "
+        f"({_synth['statut']}). Le capital accumulé avant cette date n'est jamais compté ici."
+    )
 
 st.markdown(spacer("0.6rem"), unsafe_allow_html=True)
 

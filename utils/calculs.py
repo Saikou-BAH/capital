@@ -1293,11 +1293,33 @@ def calculer_projection_plan(
 
 
 def total_apports_reels(df_mvt: pd.DataFrame) -> float:
-    """Somme brute (GNF) de tous les vrais apports enregistrés, jamais le plan."""
+    """Somme brute (GNF) de TOUS les vrais apports enregistrés depuis toujours, jamais le plan."""
+    return total_apports_reels_periode(df_mvt)
+
+
+def total_apports_reels_periode(
+    df_mvt: pd.DataFrame, date_debut=None, date_fin=None,
+) -> float:
+    """
+    Comme total_apports_reels, mais restreint aux mouvements dont la date est
+    dans [date_debut, date_fin] (bornes incluses, chacune optionnelle). Utilisé
+    pour comparer le plan à la réalité sur EXACTEMENT la même période — jamais
+    le capital accumulé avant le début du planning.
+    """
     df = _mouvements_actifs(df_mvt)
     if df.empty:
         return 0.0
-    df = df[df["type_mouvement"].astype(str).str.lower() == "apport"]
+    df = df[df["type_mouvement"].astype(str).str.lower() == "apport"].copy()
+    if df.empty:
+        return 0.0
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+    if date_debut is not None:
+        df = df[df["date"] >= pd.Timestamp(date_debut)]
+    if date_fin is not None:
+        df = df[df["date"] <= pd.Timestamp(date_fin)]
+    if df.empty:
+        return 0.0
     return float(pd.to_numeric(df["montant_converti_gnf"], errors="coerce").fillna(0.0).sum())
 
 
@@ -1360,29 +1382,66 @@ def synthese_plan_vs_reel(
     df_plan: pd.DataFrame, df_mvt: pd.DataFrame, aujourdhui: date | None = None,
 ) -> dict:
     """
-    Compare, sur les mois déjà échus uniquement, le plan (GNF) et la réalité.
-    taux_realisation = apports_reels / apports_prevus_echus * 100.
-    Les mois non échus ne comptent jamais dans "prévu échu" (sinon un planning
-    tout juste commencé serait pénalisé pour des mois qui n'ont pas eu lieu).
+    Compare, sur EXACTEMENT la même période, le plan (GNF) et la réalité :
+      - apports_prevus_echus = plan dont le mois est <= aujourd'hui.
+      - apports_reels_periode = vrais apports dont la date est comprise entre
+        le DÉBUT DU PLAN (premier mois planifié — jamais codé en dur, déduit
+        de df_plan) et aujourd'hui. Le capital déjà accumulé AVANT le début
+        du plan (ex. 177 042 961 GNF de capital existant) n'entre jamais dans
+        ce calcul : il compte pour le capital global, pas pour le respect de
+        CE planning.
+    Si aujourd'hui est avant le début du plan, ou si le plan est vide/invalide,
+    renvoie un état neutre explicite plutôt qu'un faux 0%/100%/écart.
     """
     aujourdhui = aujourdhui or date.today()
     auj_periode = pd.Timestamp(aujourdhui).to_period("M")
 
+    _vide = {
+        "date_debut_plan": None,
+        "prevu_echu_gnf": 0.0,
+        "reel_gnf": 0.0,
+        "ecart_gnf": 0.0,
+        "taux_realisation_pct": None,
+        "statut": "Aucun planning enregistré",
+        "couleur_statut": "slate",
+    }
     if df_plan is None or df_plan.empty:
-        prevu_echu_gnf = 0.0
-    else:
-        df = df_plan.copy()
-        df["mois_periode"] = df["mois"].apply(_mois_period)
-        df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
-        echus = df[df["mois_periode"].notna() & (df["mois_periode"] <= auj_periode)]
-        prevu_echu_gnf = float(echus["montant_prevu_gnf"].sum())
+        return _vide
 
-    reel_gnf = total_apports_reels(df_mvt)
+    df = df_plan.copy()
+    df["mois_periode"] = df["mois"].apply(_mois_period)
+    df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
+    df = df.dropna(subset=["mois_periode"])
+    if df.empty:
+        return _vide
+
+    debut_periode = df["mois_periode"].min()
+    date_debut_plan = debut_periode.to_timestamp().date()
+
+    if auj_periode < debut_periode:
+        # Le planning n'a pas encore commencé : aucun apport prévu n'est échu,
+        # jamais de faux pourcentage ni de division par zéro.
+        return {
+            "date_debut_plan": date_debut_plan,
+            "prevu_echu_gnf": 0.0,
+            "reel_gnf": 0.0,
+            "ecart_gnf": 0.0,
+            "taux_realisation_pct": None,
+            "statut": "Le planning n'a pas encore commencé",
+            "couleur_statut": "slate",
+        }
+
+    echus = df[df["mois_periode"] <= auj_periode]
+    prevu_echu_gnf = float(echus["montant_prevu_gnf"].sum())
+
+    # Même période EXACTE que le plan : jamais le capital accumulé avant son début.
+    reel_gnf = total_apports_reels_periode(df_mvt, date_debut_plan, aujourdhui)
     ecart = reel_gnf - prevu_echu_gnf
     taux_realisation = (reel_gnf / prevu_echu_gnf * 100) if prevu_echu_gnf > 0 else None
     statut, couleur = _statut_prevu_vs_reel(ecart, prevu_echu_gnf)
 
     return {
+        "date_debut_plan": date_debut_plan,
         "prevu_echu_gnf": prevu_echu_gnf,
         "reel_gnf": reel_gnf,
         "ecart_gnf": ecart,
@@ -1436,6 +1495,11 @@ def capital_trajectoire_ideale(
         progression_temps = clip((aujourd'hui - date_depart) / (date_cible - date_depart), 0, 1)
         capital_ideal      = capital_depart + progression_temps * (cible - capital_depart)
         ecart_trajectoire  = capital_reel - capital_ideal
+
+    Si aujourd'hui < date_depart, la période de ce palier n'a pas encore
+    commencé : aucun jugement de trajectoire n'est porté (pas de "Sous la
+    trajectoire" prématuré) — "pas_commence": True, capital_ideal/écart à
+    None, seule la date de démarrage est renvoyée.
     """
     aujourdhui = aujourdhui or date.today()
     try:
@@ -1446,6 +1510,18 @@ def capital_trajectoire_ideale(
     duree_totale = (dc - dd).days
     if duree_totale <= 0:
         return None
+
+    if aujourdhui < dd:
+        return {
+            "pas_commence": True,
+            "date_debut": dd,
+            "capital_ideal": None,
+            "ecart_trajectoire": None,
+            "ecart_trajectoire_pct": None,
+            "progression_temps_pct": 0.0,
+            "statut": "Trajectoire non commencée",
+            "couleur_statut": "slate",
+        }
 
     progression_temps = min(max((aujourdhui - dd).days / duree_totale, 0.0), 1.0)
     capital_ideal = float(capital_depart) + progression_temps * (float(montant_cible) - float(capital_depart))
@@ -1462,6 +1538,8 @@ def capital_trajectoire_ideale(
         statut, couleur = "Très en dessous de la trajectoire 🔴", "red"
 
     return {
+        "pas_commence": False,
+        "date_debut": dd,
         "capital_ideal": capital_ideal,
         "ecart_trajectoire": ecart_trajectoire,
         "ecart_trajectoire_pct": round(ecart_pct, 1),
