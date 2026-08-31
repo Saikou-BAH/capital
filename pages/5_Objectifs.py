@@ -120,7 +120,7 @@ else:
 _paliers_calc = []
 for _i_p, _p in enumerate(PALIERS_CAPITAL):
     _c = calculer_palier(capital, _p["montant_cible_gnf"], _p["date_cible"], _apport_moy, _apports_prevus_mois_actuel)
-    _proj_plan = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], df_plan, AUJOURDHUI)
+    _proj_plan = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], df_plan, AUJOURDHUI, df_mvt)
     _c.update(_proj_plan)
     _c["id"] = _p["id"]
     _c["nom"] = _p["nom"]
@@ -671,8 +671,8 @@ else:
         st.markdown(spacer("0.6rem"), unsafe_allow_html=True)
         _lignes_comparaison = []
         for _p in PALIERS_CAPITAL:
-            _proj_actuel_sim = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], df_plan, AUJOURDHUI)
-            _proj_scenario_sim = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], _df_plan_scenario, AUJOURDHUI)
+            _proj_actuel_sim = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], df_plan, AUJOURDHUI, df_mvt)
+            _proj_scenario_sim = calculer_projection_plan(capital, _p["montant_cible_gnf"], _p["date_cible"], _df_plan_scenario, AUJOURDHUI, df_mvt)
             _d_actuel = _proj_actuel_sim["date_selon_plan"]
             _d_scenario = _proj_scenario_sim["date_selon_plan"]
             if _d_actuel is not None and _d_scenario is not None:

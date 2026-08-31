@@ -1180,13 +1180,23 @@ def _mois_period(valeur) -> "pd.Period | None":
         return None
 
 
-def _plan_futur(df_plan: pd.DataFrame, aujourdhui: date | None = None) -> pd.DataFrame:
+def _plan_futur(
+    df_plan: pd.DataFrame, aujourdhui: date | None = None, df_mvt: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """
-    Lignes du plan (montants en GNF) dont le mois est strictement postérieur
-    au mois courant, triées chronologiquement. C'est la seule porte d'entrée
-    du plan vers les calculs de projection — elle exclut mécaniquement le
-    mois en cours et le passé, ce qui empêche tout double-comptage avec le
-    capital réel.
+    Lignes du plan (montants en GNF) qui ne sont PAS ENCORE réalisées, triées
+    chronologiquement. C'est la seule porte d'entrée du plan vers les calculs
+    de projection — elle empêche tout double-comptage avec le capital réel,
+    de deux façons complémentaires :
+      1. mois strictement postérieur au mois courant (le mois en cours et le
+         passé sortent mécaniquement du calcul) ;
+      2. si `df_mvt` est fourni, EXCLUT EN PLUS tout mois pour lequel un vrai
+         apport a déjà été enregistré — même si ce mois est calendairement
+         "futur" par rapport à aujourd'hui. Sans ce filtre, un vrai apport
+         saisi avec une date future (ex. enregistré le 31/08 pour le 01/09)
+         gonflerait le cumul prévisionnel en s'ajoutant par-dessus lui-même :
+         une fois compté dans capital_reel_actuel, une deuxième fois compté
+         comme "apport futur" planifié pour ce même mois.
     """
     aujourdhui = aujourdhui or date.today()
     auj_periode = pd.Timestamp(aujourdhui).to_period("M")
@@ -1198,6 +1208,10 @@ def _plan_futur(df_plan: pd.DataFrame, aujourdhui: date | None = None) -> pd.Dat
     df["montant_prevu_gnf"] = pd.to_numeric(df["montant_prevu_gnf"], errors="coerce").fillna(0.0)
     df = df.dropna(subset=["mois_periode"])
     df = df[df["mois_periode"] > auj_periode]
+    if df_mvt is not None:
+        realise = realise_par_mois(df_mvt)
+        mois_deja_reels = set(realise[realise > 0].index)
+        df = df[~df["mois_periode"].isin(mois_deja_reels)]
     return df.sort_values("mois_periode")
 
 
@@ -1206,15 +1220,17 @@ def capital_previsionnel_a_date(
     df_plan: pd.DataFrame,
     date_limite,
     aujourdhui: date | None = None,
+    df_mvt: pd.DataFrame | None = None,
 ) -> float:
     """
     capital_previsionnel = capital_reel_actuel + somme des apports FUTURS
-    planifiés en GNF (mois > mois courant) jusqu'à `date_limite` inclus.
-    Aucune conversion de devise : le plan est déjà exprimé en GNF. Ne modifie
-    jamais capital_reel_actuel.
+    et PAS ENCORE RÉALISÉS, en GNF, jusqu'à `date_limite` inclus. Aucune
+    conversion de devise : le plan est déjà exprimé en GNF. Ne modifie jamais
+    capital_reel_actuel. Passer `df_mvt` pour ne jamais compter en double un
+    mois déjà réalisé en réel (voir _plan_futur).
     """
     limite_periode = _mois_period(date_limite)
-    futur = _plan_futur(df_plan, aujourdhui)
+    futur = _plan_futur(df_plan, aujourdhui, df_mvt)
     if limite_periode is not None:
         futur = futur[futur["mois_periode"] <= limite_periode]
     somme_gnf = float(futur["montant_prevu_gnf"].sum()) if not futur.empty else 0.0
@@ -1226,17 +1242,19 @@ def date_selon_plan(
     montant_cible: float,
     df_plan: pd.DataFrame,
     aujourdhui: date | None = None,
+    df_mvt: pd.DataFrame | None = None,
 ) -> date | None:
     """
     Première date (premier jour du mois planifié) où le capital simulé —
-    capital réel actuel + cumul chronologique des apports GNF futurs
-    planifiés — franchit `montant_cible`. None si le planning actuel ne
+    capital réel actuel + cumul chronologique des apports GNF futurs ET PAS
+    ENCORE RÉALISÉS — franchit `montant_cible`. None si le planning actuel ne
     permet jamais de l'atteindre : jamais de date inventée ("Non atteint
-    avec le planning actuel" côté UI).
+    avec le planning actuel" côté UI). Passer `df_mvt` pour exclure les mois
+    déjà réalisés en réel (voir _plan_futur).
     """
     if capital_reel_actuel >= montant_cible:
         return aujourdhui or date.today()
-    futur = _plan_futur(df_plan, aujourdhui)
+    futur = _plan_futur(df_plan, aujourdhui, df_mvt)
     cumul = float(capital_reel_actuel)
     for _, ligne in futur.iterrows():
         cumul += float(ligne["montant_prevu_gnf"])
@@ -1251,12 +1269,15 @@ def calculer_projection_plan(
     date_cible,
     df_plan: pd.DataFrame,
     aujourdhui: date | None = None,
+    df_mvt: pd.DataFrame | None = None,
 ) -> dict:
     """
     Projection d'un palier SELON LE PLAN PERSONNEL (100% GNF) — strictement
     distincte de calculer_palier (rythme réel), jamais utilisée pour décider
     du statut réel "Atteint". Ne fait aucune écriture : simulation en lecture
-    seule, aucune notion de devise étrangère.
+    seule, aucune notion de devise étrangère. Passer `df_mvt` (les vrais
+    mouvements) pour qu'un mois déjà réalisé en réel ne soit jamais recompté
+    par-dessus lui-même via le plan — jamais de cumul gonflé.
     """
     try:
         dc = pd.Timestamp(date_cible).date()
@@ -1264,10 +1285,10 @@ def calculer_projection_plan(
         dc = None
 
     capital_prevu_echeance = capital_previsionnel_a_date(
-        capital_reel_actuel, df_plan, dc if dc is not None else date_cible, aujourdhui,
+        capital_reel_actuel, df_plan, dc if dc is not None else date_cible, aujourdhui, df_mvt,
     )
     ecart_capital = capital_prevu_echeance - float(montant_cible)
-    date_plan = date_selon_plan(capital_reel_actuel, montant_cible, df_plan, aujourdhui)
+    date_plan = date_selon_plan(capital_reel_actuel, montant_cible, df_plan, aujourdhui, df_mvt)
 
     # Apports prévus (GNF) avant/à l'échéance, et couverture du reste réel par
     # ce seul planning — ecart_capital équivaut exactement à
